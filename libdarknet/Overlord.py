@@ -1,12 +1,21 @@
 from sys import argv
 import darknet_zed
 import multiprocessing
+import socket
 
-
-def images():
+'''def images():
     darknet_zed.main(argv)      #calls upon the main function of darknet_zed
-
-
+'''
+def socket_client():
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.connect(('0.0.0.0', 8080))
+    stringss = "This is your client speaking<br>"
+    byt = stringss.encode()
+    client.send(byt)
+    from_server = client.recv(4096)
+    client.close()
+    print(from_server)
+'''
 def printop(detections, count):    #prints output for the detected objects (once)
     i = 0
     for _ in detections:
@@ -17,15 +26,16 @@ def printop(detections, count):    #prints output for the detected objects (once
 
         i += 1                          #an iterative value to move the cursor to the
         print(det)                      # next detected obejct and it's information in the detect list variable
-
+'''
 
 processes = []                          # a list for holding process information for parallel processing
-
+'''
 z = multiprocessing.Process(target=images)          #intention to start darknet_zed file to ensure image processing runs in the background irrespective of printing values
 z.start()                                           #starting darknet_zed
 processes.append(z)                                 #attaching darknet_zed to a list of processes that can simultaneously run
+'''
 
-zx = multiprocessing.Process(target=printop)        #printing list of detected objects
+zx = multiprocessing.Process(target=socket_client)        #printing list of detected objects
 zx.start()
 processes.append(zx)
 

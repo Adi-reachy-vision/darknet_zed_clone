@@ -25,6 +25,7 @@ from ctypes import *
 import numpy as np
 import cv2
 import pyzed.sl as sl
+import socket
 from threading import Thread
 
 # import Overlord
@@ -280,6 +281,34 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
 
     return res
 
+def socket_server(detections):
+    serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    serv.bind(('0.0.0.0', 8080))
+    serv.listen(5)
+    while True:
+        conn, addr = serv.accept()
+        from_client = ''
+        while True:
+            data_encode = conn.recv(4096)
+            data = data_encode.decode()
+            if not data: break
+            from_client += data
+            print(from_client)
+            i = 0
+            for _ in detections:
+                detect: list = detections[i]  # a list of detected objects from darknet_zed as a string holding label, positional and class info
+
+                for __ in detect:
+                    det = detect[0]  # a new variable to hold just the label information
+
+                i += 1  # an iterative value to move the cursor to the
+                print(det)  # next detected obejct and it's information in the detect list variable
+
+            #sen = detections.encode()
+            detx = det.encode()
+            conn.send(detx)
+        conn.close()
+        print('Client is no more')
 
 netMain = None
 metaMain = None
@@ -471,18 +500,18 @@ def main(argv):
             detections = detect(netMain, metaMain, image, thresh)
 
             if count == True:                                   #Boolean value to ensure, the value is constrained to being sent only once
-                Overlord.printop(detections, count)             #broadcasts the detected objects data from darknet_zed to Overlord
+                socket_server(detections)             #broadcasts the detected objects data from darknet_zed to Overlord
                 count = False                                   #Boolean value set to false, once the value has printed already
 
             bench_time = time.time()  # setting checkpoint for the loop
 
-            log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
+            #log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
 
             for detection in detections:
                 label = detection[0]
                 confidence = detection[1]
                 pstring = label + ": " + str(np.rint(100 * confidence)) + "%"
-                log.info(pstring)
+                #log.info(pstring)
                 bounds = detection[2]
                 y_extent = int(bounds[3])
                 x_extent = int(bounds[2])
@@ -509,9 +538,9 @@ def main(argv):
             cv2.imshow("ZED", image)
             key = cv2.waitKey(5)
 
-            log.info("Detection time: {}".format(bench_time - start_time))
-            log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
+            #log.info("Detection time: {}".format(bench_time - start_time))
+            #log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
+            #log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
