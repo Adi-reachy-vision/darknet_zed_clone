@@ -25,6 +25,8 @@ from ctypes import *
 import numpy as np
 import cv2
 import pyzed.sl as sl
+import socket
+
 from threading import Thread
 
 # import Overlord
@@ -281,9 +283,43 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
     return res
 
 
+def socket_server(detections):              # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
+
+    print(detections)
+    headersize = 10
+
+    serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)        # creating a socket_server
+    serv.bind(('0.0.0.0', 8080))                                    # binding the socket to an ip address , port
+    serv.listen(5)                                                  # enabling listen function
+
+    while True:
+        conn, addr = serv.accept()                                  # accepting the connection
+        print(f"Connection from {addr} has been established!")
+        msg = 'This is your server speaking'
+        msg = f'{len(msg):<{headersize}}' + msg                     # transmitting a message over the socket with a certain headersize
+        conn.send(bytes(msg, "utf-8"))                              # sending the encrypted data as a byte
+        while True:
+            time.sleep(3)
+            msg = detections
+            msg = f'{len(msg):<{headersize}}' + msg
+            conn.send(bytes(msg, "utf-8"))
+
+        print('Client is no more')                                  #concluding message
+
+
+
+def opfileprint(detection):                                         #printing the detection into a file for the Overlord to read
+    Fileman = open('YOLO_OUTPUT', 'w')                              # creating and opening file in the write configuration
+    for i in detection:
+        Fileman.write(i)                                            #writing the detection into the file
+        #Fileman.write('\n')
+    Fileman.close()
+
+
 netMain = None
 metaMain = None
 altNames = None
+
 
 def get_object_depth(depth, bounds):
     '''
@@ -346,7 +382,6 @@ def generate_color(meta_path):
 
 
 def main(argv):
-    import Overlord
     thresh = 0.25
     darknet_path = "../libdarknet/"
     config_path = darknet_path + "cfg/yolov3.cfg"
@@ -453,7 +488,7 @@ def main(argv):
     color_array = generate_color(meta_path)
 
     log.info("Running...")
-    count = True
+
     key = ''
     while key != 113:  # for 'q' key
 
@@ -469,20 +504,25 @@ def main(argv):
             # Do the detection
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
+            opfileprint(str(detections))
 
-            if count == True:                                   #Boolean value to ensure, the value is constrained to being sent only once
-                Overlord.printop(detections, count)             #broadcasts the detected objects data from darknet_zed to Overlord
-                count = False                                   #Boolean value set to false, once the value has printed already
+
+            # Boolean value to ensure, the value is constrained to being sent only once
+            # broadcasts the detected objects data from darknet_zed to Overlord
+            # Boolean value set to false, once the value has printed already
 
             bench_time = time.time()  # setting checkpoint for the loop
 
-            log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
+            # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
 
             for detection in detections:
                 label = detection[0]
                 confidence = detection[1]
                 pstring = label + ": " + str(np.rint(100 * confidence)) + "%"
-                log.info(pstring)
+                # log.info(pstring)
+                # socket_server(label)
+
+
                 bounds = detection[2]
                 y_extent = int(bounds[3])
                 x_extent = int(bounds[2])
@@ -509,9 +549,9 @@ def main(argv):
             cv2.imshow("ZED", image)
             key = cv2.waitKey(5)
 
-            log.info("Detection time: {}".format(bench_time - start_time))
-            log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
+            # log.info("Detection time: {}".format(bench_time - start_time))
+            # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
+            # log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
