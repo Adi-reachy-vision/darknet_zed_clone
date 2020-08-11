@@ -13,9 +13,7 @@ Windows Python 2.7 version: https://github.com/AlexeyAB/darknet/blob/fc496d52bf2
 # pylint: disable=R, W0401, W0614, W0703
 import multiprocessing
 import os
-import socketserver
 import sys
-import threading
 import time
 import logging
 import random
@@ -285,16 +283,28 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
     return res
 
 
-def socket_server_status(detections):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
-    # Create a UDP socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_address = ('localhost', 10000)
-    message = detections
-    try:
-        # Send data
-        sent = sock.sendto(message.encode(), server_address)
-    finally:
-        sock.close()
+def socket_server(
+        detections):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
+    localIP = "127.0.0.1"
+    localPort = 12345
+    bufferSize = 4096
+
+    message = "Hello UDP client, Here is your data -> " + detections
+    bytesToSend = str.encode(message)
+
+    serv = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+    serv.bind((localIP, localPort))
+    print("UDP server up and listening")
+
+    bytesAddressPair = serv.recvfrom(bufferSize)
+    message = bytesAddressPair[0]
+    address = bytesAddressPair[1]
+    clientMsg = "Message from client:{}".format(message)
+    clientIP = "Client IP Address:{}".format(address)
+    print(clientMsg)
+    print(clientIP)
+
+    serv.sendto(bytesToSend, address)
 
 
 def opfileprint(detection):  # printing the detection into a file for the Overlord to read
@@ -477,7 +487,7 @@ def main(argv):
     color_array = generate_color(meta_path)
 
     log.info("Running...")
-    processes = []
+
     key = ''
     while key != 113:  # for 'q' key
 
@@ -494,6 +504,7 @@ def main(argv):
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
             opfileprint(str(detections))
+            socket_server(str(detections))
 
             # Boolean value to ensure, the value is constrained to being sent only once
             # broadcasts the detected objects data from darknet_zed to Overlord
@@ -535,7 +546,6 @@ def main(argv):
 
             cv2.imshow("ZED", image)
             key = cv2.waitKey(5)
-            socket_server_status(str(detections))
 
             # log.info("Detection time: {}".format(bench_time - start_time))
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
