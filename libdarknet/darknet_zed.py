@@ -13,7 +13,9 @@ Windows Python 2.7 version: https://github.com/AlexeyAB/darknet/blob/fc496d52bf2
 # pylint: disable=R, W0401, W0614, W0703
 import multiprocessing
 import os
+import socketserver
 import sys
+import threading
 import time
 import logging
 import random
@@ -25,6 +27,8 @@ from ctypes import *
 import numpy as np
 import cv2
 import pyzed.sl as sl
+import socket
+
 from threading import Thread
 
 # import Overlord
@@ -281,9 +285,30 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
     return res
 
 
+def socket_server_status(detections):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
+    # Create a UDP socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_address = ('localhost', 10000)
+    message = detections
+    try:
+        # Send data
+        sent = sock.sendto(message.encode(), server_address)
+    finally:
+        sock.close()
+
+
+def opfileprint(detection):  # printing the detection into a file for the Overlord to read
+    Fileman = open('YOLO_OUTPUT', 'w')  # creating and opening file in the write configuration
+    for i in detection:
+        Fileman.write(i)  # writing the detection into the file
+        # Fileman.write('\n')
+    Fileman.close()
+
+
 netMain = None
 metaMain = None
 altNames = None
+
 
 def get_object_depth(depth, bounds):
     '''
@@ -346,7 +371,6 @@ def generate_color(meta_path):
 
 
 def main(argv):
-    import Overlord
     thresh = 0.25
     darknet_path = "../libdarknet/"
     config_path = darknet_path + "cfg/yolov3.cfg"
@@ -453,7 +477,7 @@ def main(argv):
     color_array = generate_color(meta_path)
 
     log.info("Running...")
-    count = True
+    processes = []
     key = ''
     while key != 113:  # for 'q' key
 
@@ -469,20 +493,23 @@ def main(argv):
             # Do the detection
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
+            opfileprint(str(detections))
 
-            if count == True:                                   #Boolean value to ensure, the value is constrained to being sent only once
-                Overlord.printop(detections, count)             #broadcasts the detected objects data from darknet_zed to Overlord
-                count = False                                   #Boolean value set to false, once the value has printed already
+            # Boolean value to ensure, the value is constrained to being sent only once
+            # broadcasts the detected objects data from darknet_zed to Overlord
+            # Boolean value set to false, once the value has printed already
 
             bench_time = time.time()  # setting checkpoint for the loop
 
-            log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
+            # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
 
             for detection in detections:
                 label = detection[0]
                 confidence = detection[1]
                 pstring = label + ": " + str(np.rint(100 * confidence)) + "%"
-                log.info(pstring)
+                # log.info(pstring)
+                #
+
                 bounds = detection[2]
                 y_extent = int(bounds[3])
                 x_extent = int(bounds[2])
@@ -508,10 +535,11 @@ def main(argv):
 
             cv2.imshow("ZED", image)
             key = cv2.waitKey(5)
+            socket_server_status(str(detections))
 
-            log.info("Detection time: {}".format(bench_time - start_time))
-            log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
+            # log.info("Detection time: {}".format(bench_time - start_time))
+            # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
+            # log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
