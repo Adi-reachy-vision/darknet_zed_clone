@@ -533,18 +533,18 @@ def main(argv):
                 x, y, z = get_object_depth(depth, bounds)
                 distance = math.sqrt(x * x + y * y + z * z)
                 distance = "{:.2f}".format(distance)
-                x_centroid = ((x_coord + x_extent) - x_coord)
-                y_centroid = ((y_coord + y_extent) - y_coord)
+                x_centroid = int(bounds[0])
+                y_centroid = int(bounds[1])
                 i = 0
                 j = 0
                 depth_var = (depth_ocv[y_centroid, x_centroid])  # finding depth of the centre of the bounding box
-                depth_threshold = depth_var * 0.95
+                depth_threshold = depth_var * 0.9
                 depth_threshold = float(round(depth_threshold, 2))
                 #print(float(round(depth_var, 2)), depth_threshold, x_extent, y_extent)
-                for i in range(y_extent):  # element by element multiplication of the height of the bounding box
-                    y_val = y_coord + (i - 1)
-                    for j in range(x_extent):  # element by element multiplication of the width of the bounding box
-                        x_val = x_coord + (j - 1)
+                for i in range(x_extent):  # element by element multiplication of the height of the bounding box
+                    x_val = x_coord + (i - 1)
+                    for j in range(y_extent):  # element by element multiplication of the width of the bounding box
+                        y_val = y_coord + (j - 1)
                         # print(x_val,j)
                         calc_depth = depth_ocv[y_val, x_val]
                         if calc_depth > depth_threshold:  # comparing the pixel distance from the threshold
