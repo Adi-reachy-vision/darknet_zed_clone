@@ -537,7 +537,7 @@ def main(argv):
                 depth_var_y = y_coord
                 i = 0
                 j = 0
-                depth_var = (depth_ocv[depth_var_y, depth_var_x]) # finding depth of the centre of the bounding box
+                depth_var = (depth_ocv[depth_var_y, depth_var_x]) # finding depth of the top left corner of the bounding box
                 #print(float(round(depth_var, 2)), depth_threshold, x_extent, y_extent)
                 for i in range(x_extent):  # element by element multiplication of the height of the bounding box
                     x_val = x_coord + i
