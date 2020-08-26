@@ -533,24 +533,22 @@ def main(argv):
                 x, y, z = get_object_depth(depth, bounds)
                 distance = math.sqrt(x * x + y * y + z * z)
                 distance = "{:.2f}".format(distance)
-                x_centroid = int(bounds[0])
-                y_centroid = int(bounds[1])
+                depth_var_x = x_coord
+                depth_var_y = y_coord
                 i = 0
                 j = 0
-                depth_var = (depth_ocv[y_centroid, x_centroid])  # finding depth of the centre of the bounding box
-                depth_threshold = depth_var * 0.9
-                depth_threshold = float(round(depth_threshold, 2))
+                depth_var = (depth_ocv[depth_var_y, depth_var_x]) # finding depth of the centre of the bounding box
                 #print(float(round(depth_var, 2)), depth_threshold, x_extent, y_extent)
                 for i in range(x_extent):  # element by element multiplication of the height of the bounding box
-                    x_val = x_coord + (i - 1)
+                    x_val = x_coord + i
                     for j in range(y_extent):  # element by element multiplication of the width of the bounding box
-                        y_val = y_coord + (j - 1)
+                        y_val = y_coord + j
                         # print(x_val,j)
                         calc_depth = depth_ocv[y_val, x_val]
-                        if calc_depth > depth_threshold:  # comparing the pixel distance from the threshold
-                            mask[y_val, x_val] = 1
-
-                    # j += 1
+                        if calc_depth < depth_var:  # comparing the pixel distance from the threshold
+                            #mask[y_val, x_val] = 1
+                            image[y_val, x_val] = (0,255,0,0)
+                        # j += 1
 
                 cv2.putText(image, label + " " + (str(distance) + " m"),
                             (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
@@ -563,7 +561,7 @@ def main(argv):
                               color_array[detection[3]], int(thickness * 2))'''
 
 
-            cv2.imshow("depth", mask)
+            #cv2.imshow("depth", mask)
             cv2.imshow("ZED", image)
             key = cv2.waitKey(5)
             socket_server_status(str(detections))
