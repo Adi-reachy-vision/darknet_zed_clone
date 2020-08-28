@@ -22,12 +22,17 @@ def opfileread_full():
         # Receive response from the server
         data, server = sock.recvfrom(4096)
         detection_data = str(data)
-        print(detection_data)
-        z = detection_data.split("'")  # splitting the string into a list based on " ' " separator
+        zx = detection_data.split("//")
+        z = zx[0].split("'")  # splitting the string into a list based on " ' " separator
         x = 1  # initiating a count variable to iterate the list
         while x < len(z):  # a while loop to iterate through the list and print odd values
             print(z[x])
             x += 2
+        z = zx[1].split(",")  # splitting the string into a list based on " ' " separator
+        x = 0  # initiating a count variable to iterate the list
+        while x < len(z):  # a while loop to iterate through the list and print odd values
+            print(z[x])
+            x += 1
     finally:
         sock.close()
 

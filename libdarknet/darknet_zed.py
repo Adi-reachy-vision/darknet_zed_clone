@@ -286,11 +286,12 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
 
 
 def socket_server_status(
-        detections):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
+        detections, point_cloud_data):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_address = ('localhost', 10000)
-    message = detections
+    message = detections + "//" + point_cloud_data
+
     try:
         # Send data
         sent = sock.sendto(message.encode(), server_address)
@@ -481,7 +482,7 @@ def main(argv):
     processes = []
     key = ''
     while key != 113:  # for 'q' key
-
+        point_cloud_data = ""
         probs = time.time()
         err = cam.grab(runtime)
         if err == sl.ERROR_CODE.SUCCESS:
@@ -494,7 +495,7 @@ def main(argv):
             # Do the detection
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
-            opfileprint(str(detections))
+            #opfileprint(str(detections))
 
             # Boolean value to ensure, the value is constrained to being sent only once
             # broadcasts the detected objects data from darknet_zed to Overlord
@@ -522,9 +523,9 @@ def main(argv):
 
                 x, y, z = get_object_depth(depth, bounds)
                 distance = math.sqrt(x * x + y * y + z * z)
-                depth_var = distance * 6        # obtaining a scaled euclidian distance of an anchor point in the bounding box as a threshold
+                depth_var = distance * 10        # obtaining a scaled euclidian distance of an anchor point in the bounding box as a threshold
                 distance = "{:.2f}".format(distance)
-                
+                distance_data = str(label) + ", position from camera x = " + str(round(x,2)) +" m,  y= " + str(round(y,2)) + " m,  z= " + str(round(z,2)) + " m,"
                 '''depth_var = (depth[y_centroid, x_centroid])  # finding depth of the centre of the bounding box
                 depth_var = math.sqrt((depth_var[0] * depth_var[0]) + (depth_var[1] * depth_var[1]) + (
                         depth_var[2] * depth_var[2])) * 6       #performing a sqrt multiplication to get the euclidian distance of an anchor point in the bounding box as a threshold'''
@@ -537,7 +538,7 @@ def main(argv):
                         try:
                             calc_depth = depth[y_val, x_val]
                             calc_depth = math.sqrt((calc_depth[0] * calc_depth[0]) + (calc_depth[1] * calc_depth[1]) + (
-                                calc_depth[2] * calc_depth[2])) * 6  # calculating euclidian distance of a pixel
+                                calc_depth[2] * calc_depth[2])) * 10  # calculating euclidian distance of a pixel
                             if calc_depth < depth_var:  # comparing the pixel distance from the threshold
                                 #print("True")
                                 image[y_val, x_val] = (0,255,0,0)
@@ -545,7 +546,7 @@ def main(argv):
                             pass
 
                     # j += 1
-
+                point_cloud_data += distance_data
                 '''cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
                               (x_coord + x_extent + thickness, y_coord + (18 + thickness * 4)),
                               color_array[detection[3]], -1)'''
@@ -556,10 +557,11 @@ def main(argv):
                               (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
                               color_array[detection[3]], int(thickness * 2))'''
 
+
             cv2.imshow("ZED", image)
             #cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
-            socket_server_status(str(detections))
+            socket_server_status(str(detections), point_cloud_data)
 
             # log.info("Detection time: {}".format(bench_time - start_time))
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
