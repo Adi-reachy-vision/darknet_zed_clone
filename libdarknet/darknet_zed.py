@@ -1,9 +1,12 @@
 #!python3
 """
 Python 3 wrapper for identifying objects in images
+
 Requires DLL compilation
+
 Original *nix 2.7: https://github.com/pjreddie/darknet/blob/0f110834f4e18b30d5f101bf8f1724c34b7b83db/python/darknet.py
 Windows Python 2.7 version: https://github.com/AlexeyAB/darknet/blob/fc496d52bf22a0bb257300d3c79be9cd80e722cb/build/darknet/x64/darknet.py
+
 @author: Philip Kahn, Aymeric Dujardin
 @date: 20180911
 """
@@ -25,12 +28,12 @@ import numpy as np
 import cv2
 import pyzed.sl as sl
 import socket
-import matplotlib.pyplot
 
 from threading import Thread
 
 # import Overlord
 # Get the top-level logger object
+
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -283,11 +286,12 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
 
 
 def socket_server_status(
-        detections):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
+        detections, point_cloud_data):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_address = ('localhost', 10000)
-    message = detections
+    message = detections + "//" + point_cloud_data
+
     try:
         # Send data
         sent = sock.sendto(message.encode(), server_address)
@@ -298,8 +302,8 @@ def socket_server_status(
 def opfileprint(detection):  # printing the detection into a file for the Overlord to read
     Fileman = open('YOLO_OUTPUT', 'w')  # creating and opening file in the write configuration
     for i in detection:
-        Fileman.write(str(i))  # writing the detection into the file
-        Fileman.write('\n')
+        Fileman.write(i)  # writing the detection into the file
+        # Fileman.write('\n')
     Fileman.close()
 
 
@@ -319,6 +323,7 @@ def get_object_depth(depth, bounds):
             bounds[1]: y-center
             bounds[2]: width of bounding box.
             bounds[3]: height of bounding box.
+
     Return:
         x, y, z: Location of object in meters.
     '''
@@ -353,6 +358,7 @@ def generate_color(meta_path):
     Generate random colors for the number of classes mentioned in data file.
     Arguments:
     meta_path: Path to .data file.
+
     Return:
     color_array: RGB color codes for each class.
     '''
@@ -408,14 +414,13 @@ def main(argv):
         # Launch camera by id
         input_type.set_from_camera_id(zed_id)
 
-    cam = sl.Camera()
-
     init = sl.InitParameters(input_t=input_type)
     init.coordinate_units = sl.UNIT.METER
     init.depth_minimum_distance = 0.15
-    init.depth_mode = sl.DEPTH_MODE.ULTRA  # Use ULTRA depth mode
     init.camera_resolution = sl.RESOLUTION.VGA
     init.camera_fps = 60
+
+    cam = sl.Camera()
     if not cam.is_opened():
         log.info("Opening ZED Camera...")
     status = cam.open(init)
@@ -423,17 +428,6 @@ def main(argv):
         log.error(repr(status))
         exit()
 
-    obj_param = sl.ObjectDetectionParameters()
-    obj_param.enable_tracking = True
-    obj_param.image_sync = True
-    obj_param.enable_mask_output = True
-
-    camera_infos = cam.get_camera_information()
-    if obj_param.enable_tracking:
-        positional_tracking_param = sl.PositionalTrackingParameters()
-        # positional_tracking_param.set_as_static = True
-        positional_tracking_param.set_floor_as_origin = True
-        cam.enable_positional_tracking(positional_tracking_param)
     runtime = sl.RuntimeParameters()
     # Use FILL sensing mode
     runtime.sensing_mode = sl.SENSING_MODE.FILL
@@ -483,36 +477,36 @@ def main(argv):
             pass
 
     color_array = generate_color(meta_path)
-    cam.enable_object_detection(obj_param)
 
     log.info("Running...")
     processes = []
     key = ''
     while key != 113:  # for 'q' key
+        point_cloud_data = ""
+        depth_zed = sl.Mat(cam.get_camera_information().camera_resolution.width,
+                           cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.F32_C1)
 
         probs = time.time()
         err = cam.grab(runtime)
-        depth_zed = sl.Mat(cam.get_camera_information().camera_resolution.width,
-                           cam.get_camera_information().camera_resolution.height, sl.MAT_TYPE.F32_C1)
         if err == sl.ERROR_CODE.SUCCESS:
             cam.retrieve_image(mat, sl.VIEW.LEFT)
             image = mat.get_data()
-            objects = sl.Objects()
-            # mesh = sl.Mesh.get_data()
-            obj_runtime_param = sl.ObjectDetectionRuntimeParameters()
-            obj_runtime_param.detection_confidence_threshold = 40
+
             cam.retrieve_measure(
                 point_cloud_mat, sl.MEASURE.XYZRGBA)
+            cam.retrieve_measure(depth_zed,sl.MEASURE.DEPTH)
             depth = point_cloud_mat.get_data()
             # Do the detection
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
-            opfileprint(str(detections))
-            cam.retrieve_measure(depth_zed, sl.MEASURE.DEPTH)       #retrieving depth data
-            depth_ocv = depth_zed.get_data()                    #obtaining the depth data in an array
+            #opfileprint(str(detections))
+
+            # Boolean value to ensure, the value is constrained to being sent only once
+            # broadcasts the detected objects data from darknet_zed to Overlord
+            # Boolean value set to false, once the value has printed already
 
             bench_time = time.time()  # setting checkpoint for the loop
-            mask = np.zeros((image.shape[0], image.shape[1]))
+            mask = np.zeros((image.shape[0],image.shape[1],image.shape[2]))
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
 
             for detection in detections:
@@ -530,45 +524,65 @@ def main(argv):
                 y_coord = int(bounds[1] - bounds[3] / 2)
                 # boundingBox = [[x_coord, y_coord], [x_coord, y_coord + y_extent], [x_coord + x_extent, y_coord + y_extent], [x_coord + x_extent, y_coord]]
                 thickness = 1
+
                 x, y, z = get_object_depth(depth, bounds)
                 distance = math.sqrt(x * x + y * y + z * z)
+                depth_var = distance * 10        # obtaining a scaled euclidian distance of an anchor point in the bounding box as a threshold
                 distance = "{:.2f}".format(distance)
-                depth_var_x = x_coord
-                depth_var_y = y_coord
-                i = 0
-                j = 0
-                depth_var = (depth_ocv[depth_var_y, depth_var_x]) # finding depth of the top left corner of the bounding box
-                #print(float(round(depth_var, 2)), depth_threshold, x_extent, y_extent)
-                for i in range(x_extent):  # element by element multiplication of the height of the bounding box
-                    x_val = x_coord + i
-                    for j in range(y_extent):  # element by element multiplication of the width of the bounding box
-                        y_val = y_coord + j
+                distance_data = str(label) + ", position from camera x = " + str(round(x,2)) +" m,  y= " + str(round(y,2)) + " m,  z= " + str(round(z,2)) + " m,"
+                '''depth_var = (depth[y_centroid, x_centroid])  # finding depth of the centre of the bounding box
+                depth_var = math.sqrt((depth_var[0] * depth_var[0]) + (depth_var[1] * depth_var[1]) + (
+                        depth_var[2] * depth_var[2])) * 6       #performing a sqrt multiplication to get the euclidian distance of an anchor point in the bounding box as a threshold'''
+                #print(depth_var, label)
+                median_depth = []
+                calc_depth_value = []
+                for i in range(y_extent):  # element by element multiplication of the height of the bounding box
+                    y_val = y_coord + (i-1)
+                    for j in range(x_extent):  # element by element multiplication of the width of the bounding box
+                        x_val = x_coord + (j-1)
                         # print(x_val,j)
-                        calc_depth = depth_ocv[y_val, x_val]
-                        if calc_depth < depth_var:  # comparing the pixel distance from the threshold
-                            #mask[y_val, x_val] = 1
-                            image[y_val, x_val] = (0,255,0,0)
-                        # j += 1
+                        try:
+                            calc_depth = depth_zed.get_value(y_val,x_val)
+                            #print(calc_depth[1])
+                            median_depth = calc_depth[1]
+                        except:
+                            pass
+                #print(np.median(median_depth),label)
+                median = np.median(median_depth)
+                for i in range(y_extent):  # element by element multiplication of the height of the bounding box
+                    y_val = y_coord + (i-1)
+                    for j in range(x_extent):  # element by element multiplication of the width of the bounding box
+                        x_val = x_coord + (j-1)
+                        # print(x_val,j)
+                        try:
+                            calc_depth = depth_zed.get_value(y_val,x_val)
+                            if calc_depth[1] < median:  # comparing the pixel distance from the threshold
+                                #print("True")
+                                image[y_val, x_val] = (0,255,0,0)
+                        except:
+                            pass
 
+                    # j += 1
+                point_cloud_data += distance_data
+                '''cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
+                              (x_coord + x_extent + thickness, y_coord + (18 + thickness * 4)),
+                              color_array[detection[3]], -1)'''
                 cv2.putText(image, label + " " + (str(distance) + " m"),
                             (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                 cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
                               (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
                               color_array[detection[3]], int(thickness * 2))
-                '''cv2.rectangle(image, (int(first_object.bounding_box_2d[0,0]),int(first_object.bounding_box_2d[0,1])),
-                              (int(first_object.bounding_box_2d[2,0]),int(first_object.bounding_box_2d[2,1])),
-                              color_array[detection[3]], int(thickness * 2))'''
 
 
-            #cv2.imshow("depth", mask)
             cv2.imshow("ZED", image)
+            #cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
-            socket_server_status(str(detections))
+            socket_server_status(str(detections), point_cloud_data)
 
             # log.info("Detection time: {}".format(bench_time - start_time))
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            # log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
+            log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
