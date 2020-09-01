@@ -286,7 +286,8 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
 
 
 def socket_server_status(
-        detections, point_cloud_data):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
+        detections,
+        point_cloud_data):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_address = ('localhost', 10000)
@@ -370,6 +371,26 @@ def generate_color(meta_path):
     for x in range(0, class_num):
         color_array.append((randint(0, 255), randint(0, 255), randint(0, 255)))
     return color_array
+
+
+def get_median_depth(y_extent, x_extent, y_coord, x_coord, depth):
+    median_depth = []
+    for i in range(y_extent):  # element by element multiplication of the height of the bounding box
+        y_val = y_coord + (i - 1)
+        for j in range(x_extent):  # element by element multiplication of the width of the bounding box
+            x_val = x_coord + (j - 1)
+            # print(x_val,j)
+            try:
+                calc_depth = depth[y_val, x_val]
+                calc_depth = math.sqrt((calc_depth[0] * calc_depth[0]) + (calc_depth[1] * calc_depth[1]) + (
+                        calc_depth[2] * calc_depth[2])) * 10  # calculating euclidian distance of a pixel
+                median_depth = calc_depth
+
+            except:
+                pass
+    median = np.median(median_depth)
+
+    return median
 
 
 def main(argv):
@@ -495,14 +516,14 @@ def main(argv):
             # Do the detection
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
-            #opfileprint(str(detections))
+            # opfileprint(str(detections))
 
             # Boolean value to ensure, the value is constrained to being sent only once
             # broadcasts the detected objects data from darknet_zed to Overlord
             # Boolean value set to false, once the value has printed already
 
             bench_time = time.time()  # setting checkpoint for the loop
-            mask = np.zeros((image.shape[0],image.shape[1],image.shape[2]))
+            mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
 
             for detection in detections:
@@ -523,62 +544,47 @@ def main(argv):
 
                 x, y, z = get_object_depth(depth, bounds)
                 distance = math.sqrt(x * x + y * y + z * z)
-                depth_var = distance * 10        # obtaining a scaled euclidian distance of an anchor point in the bounding box as a threshold
+                depth_var = distance * 10  # obtaining a scaled euclidian distance of an anchor point in the bounding box as a threshold
                 distance = "{:.2f}".format(distance)
-                distance_data = str(label) + ", position from camera x = " + str(round(x,2)) +" m,  y= " + str(round(y,2)) + " m,  z= " + str(round(z,2)) + " m,"
-                '''depth_var = (depth[y_centroid, x_centroid])  # finding depth of the centre of the bounding box
-                depth_var = math.sqrt((depth_var[0] * depth_var[0]) + (depth_var[1] * depth_var[1]) + (
-                        depth_var[2] * depth_var[2])) * 6       #performing a sqrt multiplication to get the euclidian distance of an anchor point in the bounding box as a threshold'''
-                #print(depth_var, label)
-                median_depth = []
-                calc_depth_value = []
-                for i in range(y_extent):  # element by element multiplication of the height of the bounding box
-                    y_val = y_coord + (i-1)
-                    for j in range(x_extent):  # element by element multiplication of the width of the bounding box
-                        x_val = x_coord + (j-1)
-                        # print(x_val,j)
-                        try:
-                            calc_depth = depth[y_val, x_val]
-                            calc_depth = math.sqrt((calc_depth[0] * calc_depth[0]) + (calc_depth[1] * calc_depth[1]) + (
-                                calc_depth[2] * calc_depth[2])) * 10  # calculating euclidian distance of a pixel
-                            median_depth = calc_depth
-                            calc_depth_value[y_val,x_val] = calc_depth
-                        except:
-                            pass
-                #print(np.median(median_depth),label)
-                median = np.median(median_depth)
-                for i in range(y_extent):  # element by element multiplication of the height of the bounding box
-                    y_val = y_coord + (i-1)
-                    for j in range(x_extent):  # element by element multiplication of the width of the bounding box
-                        x_val = x_coord + (j-1)
-                        # print(x_val,j)
-                        try:
-                            calc_depth = depth[y_val, x_val]
+                distance_data = str(label) + ", position from camera x = " + str(round(x, 2)) + " m,  y= " + str(
+                    round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
 
-                            calc_depth = math.sqrt((calc_depth[0] * calc_depth[0]) + (calc_depth[1] * calc_depth[1]) + (
-                                calc_depth[2] * calc_depth[2])) * 10  # calculating euclidian distance of a pixel
+                # print(np.median(median_depth),label)
+                if label == "tvmonitor":    #if statement to filter the classes needed for segmentation
+                    median = get_median_depth(y_extent,x_extent,y_coord,x_coord,depth)      #getting median depth from the function for establishing depth threshold of the bounding box for segmentation
+                    for i in range(y_extent):  # element by element multiplication of the height of the bounding box
+                        y_val = y_coord + (i - 1)
+                        for j in range(x_extent):  # element by element multiplication of the width of the bounding box
+                            x_val = x_coord + (j - 1)
+                            # print(x_val,j)
+                            try:            #encapsulating the depth calculation in a try - catch block to prevent value errors
+                                calc_depth = depth[y_val, x_val]        #storing x,y,z values from individual pixels for comparing with the threshold value
+                                calc_depth = math.sqrt((calc_depth[0] * calc_depth[0]) + (calc_depth[1] * calc_depth[1]) + (
+                                        calc_depth[2] * calc_depth[2])) * 10  # calculating euclidian distance of a pixel
+                                if calc_depth < median:  # comparing the pixel distance from the threshold
+                                    # print("True")
+                                    image[y_val, x_val] = (0, 55, 0, 0)
+                            except:
+                                pass
+                    cv2.putText(image, label + " " + (str(distance) + " m"),
+                                    (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)                         #pasting label on top of the segmentation mask
 
-                            if calc_depth < median:  # comparing the pixel distance from the threshold
-                                #print("True")
-                                image[y_val, x_val] = (0,255,0,0)
-                        except:
-                            pass
+                else:        # j += 1
 
-                    # j += 1
+                    '''cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
+                                  (x_coord + x_extent + thickness, y_coord + (18 + thickness * 4)),
+                                  color_array[detection[3]], -1)'''
+                    cv2.putText(image, label + " " + (str(distance) + " m"),                                    #pasting label on top of detected object
+                                (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                    cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),                            #pasting bounding box around detected object
+                                  (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
+                                  color_array[detection[3]], int(thickness))
                 point_cloud_data += distance_data
-                '''cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
-                              (x_coord + x_extent + thickness, y_coord + (18 + thickness * 4)),
-                              color_array[detection[3]], -1)'''
-                cv2.putText(image, label + " " + (str(distance) + " m"),
-                            (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
-                              (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
-                              color_array[detection[3]], int(thickness * 2))
-
 
             cv2.imshow("ZED", image)
-            #cv2.imshow("mask", mask)
+            # cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
             socket_server_status(str(detections), point_cloud_data)
 
