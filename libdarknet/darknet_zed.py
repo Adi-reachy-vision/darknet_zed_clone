@@ -394,11 +394,15 @@ def get_color(image):
     blue = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
     green = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
     red = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
+    yellow = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
+    orange = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
     white = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
 
     boundaries = [([17, 15, 100], [50, 56, 200]),
                   ([86, 31, 4], [220, 88, 50]),
                   ([25, 146, 190], [62, 174, 250]),
+                  ([0, 255, 255], [153, 255, 255]),
+                  ([1, 190, 200], [18, 255, 255]),
                   ([103, 86, 65], [145, 133, 128])]
     count = 0
     for (lower, upper) in boundaries:
@@ -417,25 +421,42 @@ def get_color(image):
             elif count == 3:
                 green = mask
             elif count == 4:
+                yellow == mask
+            elif count == 5:
+                orange = mask
+            elif count == 6:
                 white = mask
 
         except:
             pass
 
-    blue_sum = np.sum(blue)  # adding mask values to differentiate the dominant color
-    green_sum = np.sum(green)
-    red_sum = np.sum(red)
-    white_sum = np.sum(white)
+    blue_sum = int(np.sum(blue))  # adding mask values to differentiate the dominant color
+    green_sum = int(np.sum(green))
+    red_sum = int(np.sum(red))
+    yellow_sum = int(np.sum(yellow))
+    orange_sum = int(np.sum(orange))
+    white_sum = int(np.sum(white))
+    print(white_sum)
 
     # placing the sum in an array to be sorted
-    color_arrays = [str(blue_sum) + " / Blue", (str(green_sum) + " / green"), (str(red_sum) + " / red"),
-                    (str(white_sum) + " / white")]
-    final_color_array = np.sort(color_arrays, axis=0)
-    final_color = final_color_array[len(final_color_array) - 1]
-    final_color = final_color.split("/")
-    print_color = final_color[1]  # storing the max value in an string to be printed
 
-    return print_color
+    color_arrays = [blue_sum,green_sum,red_sum,yellow_sum,orange_sum,white_sum]
+    color_arrays = np.sort(color_arrays)
+    print_color = color_arrays[len(color_arrays)-1]
+    if print_color == blue_sum:
+        object_color = "Blue"
+    elif print_color == green_sum:
+        object_color = "Green"
+    elif print_color == red_sum:
+        object_color = "Red"
+    elif print_color == yellow_sum:
+        object_color = "Yellow"
+    elif print_color == orange_sum:
+        object_color = "Orange"
+    elif print_color == white_sum:
+        object_color = "White"
+
+    return object_color
 
 
 def main(argv):
