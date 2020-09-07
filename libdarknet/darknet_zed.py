@@ -411,57 +411,31 @@ def get_color(image):
             # the mask
             mask = cv2.inRange(img, lower, upper)
             if count == 1:
-                blue = mask
+                red = mask  # seperating the values into seperate masks based on color
             elif count == 2:
-                green = mask
+                blue = mask
             elif count == 3:
-                red = mask
+                green = mask
             elif count == 4:
                 white = mask
 
         except:
             pass
 
-    blue_count = 0
-    green_count = 0
-    red_count = 0
-    white_count = 0
-    
-    if blue.any() > green.any():
-        blue_count += 1
-    if blue.any() > red.any():
-        blue_count += 1
-    if blue.any() > white.any():
-        blue_count += 1
+    blue_sum = np.sum(blue)  # adding mask values to differentiate the dominant color
+    green_sum = np.sum(green)
+    red_sum = np.sum(red)
+    white_sum = np.sum(white)
 
-    if green.any() > red.any():
-        green_count += 1
-    if green.any() > white.any():
-        green_count += 1
-    if green.any() > blue.any():
-        green_count += 1
-
-    if red.any() > white.any():
-        red_count += 1
-    if red.any() > blue.any():
-        red_count += 1
-    if red.any() > green.any():
-        red_count += 1
-
-    if white.any() > blue.any():
-        white_count += 1
-    '''if white.any() > green.any:
-        white_count += 1'''
-    if white.any() > red.any():
-        white_count += 1
-
-    color_arrays = [(blue_count, "Blue"), (green_count, "green"), (red_count, "red"), (white_count, "white")]
+    # placing the sum in an array to be sorted
+    color_arrays = [str(blue_sum) + " / Blue", (str(green_sum) + " / green"), (str(red_sum) + " / red"),
+                    (str(white_sum) + " / white")]
     final_color_array = np.sort(color_arrays, axis=0)
     final_color = final_color_array[len(final_color_array) - 1]
-    final_color = final_color[1]
+    final_color = final_color.split("/")
+    print_color = final_color[1]  # storing the max value in an string to be printed
 
-
-    return final_color
+    return print_color
 
 
 def main(argv):
@@ -621,11 +595,17 @@ def main(argv):
                     round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
 
                 # print(np.median(median_depth),label)
-                if label == "bottle":  # if statement to filter the classes needed for segmentation
+                if label == "bottle":
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
                     color_string = get_color(
                         cropped_image)  # getting the color output from the color recognition function
                     # print(masked)
+                    cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
+                                (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
+                                2)  # pasting label on top of the segmentation mask
+                elif label == "cellphone":  # if statement to filter the classes needed for segmentation
+
                     '''median = get_median_depth(y_extent, x_extent, y_coord, x_coord,
                                               depth)  # getting median depth from the function for establishing depth threshold of the bounding box for segmentation
                     for i in range(y_extent):  # element by element multiplication of the height of the bounding box
@@ -645,7 +625,7 @@ def main(argv):
                                     image[y_val, x_val] = (0, 55, 0, 0)
                             except:
                                 pass'''
-                    cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
+                    cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
