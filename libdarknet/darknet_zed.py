@@ -13,7 +13,9 @@ Windows Python 2.7 version: https://github.com/AlexeyAB/darknet/blob/fc496d52bf2
 # pylint: disable=R, W0401, W0614, W0703
 import multiprocessing
 import os
+import socketserver
 import sys
+import threading
 import time
 import logging
 import random
@@ -25,11 +27,9 @@ from ctypes import *
 import numpy as np
 import cv2
 import pyzed.sl as sl
+import socket
+
 from threading import Thread
-
-# import Overlord
-# Get the top-level logger object
-
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -281,9 +281,33 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
     return res
 
 
+def socket_server_status(
+        detections,
+        point_cloud_data):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
+    # Create a UDP socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_address = ('localhost', 10000)
+    message = detections + "//" + point_cloud_data
+
+    try:
+        # Send data
+        sent = sock.sendto(message.encode(), server_address)
+    finally:
+        sock.close()
+
+
+def opfileprint(detection):  # printing the detection into a file for the Overlord to read
+    Fileman = open('YOLO_OUTPUT', 'w')  # creating and opening file in the write configuration
+    for i in detection:
+        Fileman.write(i)  # writing the detection into the file
+        # Fileman.write('\n')
+    Fileman.close()
+
+
 netMain = None
 metaMain = None
 altNames = None
+
 
 def get_object_depth(depth, bounds):
     '''
@@ -345,8 +369,102 @@ def generate_color(meta_path):
     return color_array
 
 
+def get_median_depth(y_extent, x_extent, y_coord, x_coord, depth):
+    median_depth = []
+    for i in range(y_extent):  # element by element multiplication of the height of the bounding box
+        y_val = y_coord + (i - 1)
+        for j in range(x_extent):  # element by element multiplication of the width of the bounding box
+            x_val = x_coord + (j - 1)
+            # print(x_val,j)
+            try:
+                calc_depth = depth[y_val, x_val]
+                calc_depth = math.sqrt((calc_depth[0] * calc_depth[0]) + (calc_depth[1] * calc_depth[1]) + (
+                        calc_depth[2] * calc_depth[2])) * 10  # calculating euclidian distance of a pixel
+                median_depth = calc_depth
+
+            except:
+                pass
+    median = np.median(median_depth)
+
+    return median
+
+
+def get_color(image):
+    img = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+    blue = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
+    green = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
+    red = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
+    white = np.zeros((img.shape[0], img.shape[1], img.shape[2]))
+
+    boundaries = [([17, 15, 100], [50, 56, 200]),
+                  ([86, 31, 4], [220, 88, 50]),
+                  ([25, 146, 190], [62, 174, 250]),
+                  ([103, 86, 65], [145, 133, 128])]
+    count = 0
+    for (lower, upper) in boundaries:
+        try:
+            count += 1
+            # create NumPy arrays from the boundaries
+            lower = np.array(lower, dtype="uint8")
+            upper = np.array(upper, dtype="uint8")
+            # find the colors within the specified boundaries and apply
+            # the mask
+            mask = cv2.inRange(img, lower, upper)
+            if count == 1:
+                blue = mask
+            elif count == 2:
+                green = mask
+            elif count == 3:
+                red = mask
+            elif count == 4:
+                white = mask
+
+        except:
+            pass
+
+    blue_count = 0
+    green_count = 0
+    red_count = 0
+    white_count = 0
+    
+    if blue.any() > green.any():
+        blue_count += 1
+    if blue.any() > red.any():
+        blue_count += 1
+    if blue.any() > white.any():
+        blue_count += 1
+
+    if green.any() > red.any():
+        green_count += 1
+    if green.any() > white.any():
+        green_count += 1
+    if green.any() > blue.any():
+        green_count += 1
+
+    if red.any() > white.any():
+        red_count += 1
+    if red.any() > blue.any():
+        red_count += 1
+    if red.any() > green.any():
+        red_count += 1
+
+    if white.any() > blue.any():
+        white_count += 1
+    '''if white.any() > green.any:
+        white_count += 1'''
+    if white.any() > red.any():
+        white_count += 1
+
+    color_arrays = [(blue_count, "Blue"), (green_count, "green"), (red_count, "red"), (white_count, "white")]
+    final_color_array = np.sort(color_arrays, axis=0)
+    final_color = final_color_array[len(final_color_array) - 1]
+    final_color = final_color[1]
+
+
+    return final_color
+
+
 def main(argv):
-    import Overlord
     thresh = 0.25
     darknet_path = "../libdarknet/"
     config_path = darknet_path + "cfg/yolov3.cfg"
@@ -453,10 +571,10 @@ def main(argv):
     color_array = generate_color(meta_path)
 
     log.info("Running...")
-    count = True
+    processes = []
     key = ''
     while key != 113:  # for 'q' key
-
+        point_cloud_data = ""
         probs = time.time()
         err = cam.grab(runtime)
         if err == sl.ERROR_CODE.SUCCESS:
@@ -469,20 +587,23 @@ def main(argv):
             # Do the detection
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
+            # opfileprint(str(detections))
 
-            if count == True:                                   #Boolean value to ensure, the value is constrained to being sent only once
-                Overlord.printop(detections, count)             #broadcasts the detected objects data from darknet_zed to Overlord
-                count = False                                   #Boolean value set to false, once the value has printed already
+            # Boolean value to ensure, the value is constrained to being sent only once
+            # broadcasts the detected objects data from darknet_zed to Overlord
+            # Boolean value set to false, once the value has printed already
 
             bench_time = time.time()  # setting checkpoint for the loop
-
-            log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
+            mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))
+            # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
 
             for detection in detections:
                 label = detection[0]
                 confidence = detection[1]
                 pstring = label + ": " + str(np.rint(100 * confidence)) + "%"
-                log.info(pstring)
+                # log.info(pstring)
+                #
+
                 bounds = detection[2]
                 y_extent = int(bounds[3])
                 x_extent = int(bounds[2])
@@ -494,24 +615,63 @@ def main(argv):
 
                 x, y, z = get_object_depth(depth, bounds)
                 distance = math.sqrt(x * x + y * y + z * z)
+                depth_var = distance * 10  # obtaining a scaled euclidian distance of an anchor point in the bounding box as a threshold
                 distance = "{:.2f}".format(distance)
+                distance_data = str(label) + ", position from camera x = " + str(round(x, 2)) + " m,  y= " + str(
+                    round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
 
-                cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
-                              (x_coord + x_extent + thickness, y_coord + (18 + thickness * 4)),
-                              color_array[detection[3]], -1)
-                cv2.putText(image, label + " " + (str(distance) + " m"),
-                            (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
-                              (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
-                              color_array[detection[3]], int(thickness * 2))
+                # print(np.median(median_depth),label)
+                if label == "bottle":  # if statement to filter the classes needed for segmentation
+                    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
+                    color_string = get_color(
+                        cropped_image)  # getting the color output from the color recognition function
+                    # print(masked)
+                    '''median = get_median_depth(y_extent, x_extent, y_coord, x_coord,
+                                              depth)  # getting median depth from the function for establishing depth threshold of the bounding box for segmentation
+                    for i in range(y_extent):  # element by element multiplication of the height of the bounding box
+                        y_val = y_coord + (i - 1)
+                        for j in range(x_extent):  # element by element multiplication of the width of the bounding box
+                            x_val = x_coord + (j - 1)
+                            # print(x_val,j)
+                            try:  # encapsulating the depth calculation in a try - catch block to prevent value errors
+                                calc_depth = depth[
+                                    y_val, x_val]  # storing x,y,z values from individual pixels for comparing with the threshold value
+                                calc_depth = math.sqrt(
+                                    (calc_depth[0] * calc_depth[0]) + (calc_depth[1] * calc_depth[1]) + (
+                                            calc_depth[2] * calc_depth[
+                                        2])) * 10  # calculating euclidian distance of a pixel
+                                if calc_depth < median:  # comparing the pixel distance from the threshold
+                                    # print("True")
+                                    image[y_val, x_val] = (0, 55, 0, 0)
+                            except:
+                                pass'''
+                    cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
+                                (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
+                                2)  # pasting label on top of the segmentation mask
+
+                else:  # j += 1
+
+                    '''cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
+                                  (x_coord + x_extent + thickness, y_coord + (18 + thickness * 4)),
+                                  color_array[detection[3]], -1)'''
+                    cv2.putText(image, label + " " + (str(distance) + " m"),  # pasting label on top of detected object
+                                (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                    cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
+                                  # pasting bounding box around detected object
+                                  (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
+                                  color_array[detection[3]], int(thickness))
+                point_cloud_data += distance_data
 
             cv2.imshow("ZED", image)
+            # cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
+            socket_server_status(str(detections), point_cloud_data)
 
-            log.info("Detection time: {}".format(bench_time - start_time))
-            log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
+            # log.info("Detection time: {}".format(bench_time - start_time))
+            # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
+            # log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
