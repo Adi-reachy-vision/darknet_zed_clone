@@ -287,7 +287,8 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
 
 def socket_server_status(
         detections,
-        point_cloud_data):  # a socket programme to transmit a certain amount of encrypted data via a TCP or UDP protocol between this program and some other program where the data is needed.
+        point_cloud_data):  # a socket programme to transmit a certain amount of encrypted data via a TCP or 
+                                #UDP protocol between this program and some other program where the data is needed.
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_address = ('localhost', 10000)
