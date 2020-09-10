@@ -388,6 +388,17 @@ def get_median_depth(y_extent, x_extent, y_coord, x_coord, depth):
 
     return median
 
+def get_color_segmentation_mask(cropped_image,color,mask,y_coord,y_extent,x_coord,x_extent,thresh):
+    cropped_image = cv2.cvtColor(cropped_image,cv2.COLOR_BGRA2BGR) #cropping the image to the size of the bounding box
+    blue = color[0]         #storing blue value in bgr
+    green = color[1]        #storing green value in bgr
+    red = color[2]          #storing red value in bgr
+
+    lower = np.array([(int(blue) - thresh), (int(green) - thresh), (int(red) - thresh)], dtype="uint8")
+    upper = np.array([(int(blue) + thresh), (int(green) + thresh), (int(red) + thresh)], dtype="uint8")
+    masked = cv2.inRange(cropped_image, lower, upper)
+    mask[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] = masked
+    return mask
 
 def get_color(image):
     img = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
@@ -589,7 +600,7 @@ def main(argv):
             # Boolean value set to false, once the value has printed already
 
             bench_time = time.time()  # setting checkpoint for the loop
-            mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))
+            mask = np.zeros((image.shape[0], image.shape[1]))
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
 
             for detection in detections:
@@ -614,6 +625,14 @@ def main(argv):
                 distance = "{:.2f}".format(distance)
                 distance_data = str(label) + ", position from camera x = " + str(round(x, 2)) + " m,  y= " + str(
                     round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
+                cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
+                try:
+                    color = image[int(bounds[0]), int(bounds[1])]
+                except:
+                    pass
+
+                thresh_color = 20
+                mask = get_color_segmentation_mask(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent, thresh_color)
 
                 # print(np.median(median_depth),label)
                 if label == "bottle":
@@ -666,7 +685,7 @@ def main(argv):
                 point_cloud_data += distance_data
 
             cv2.imshow("ZED", image)
-            # cv2.imshow("mask", mask)
+            cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
             socket_server_status(str(detections), point_cloud_data)
 
