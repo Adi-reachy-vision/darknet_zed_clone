@@ -369,7 +369,7 @@ def generate_color(meta_path):
     return color_array
 
 
-def get_median_depth(y_extent, x_extent, y_coord, x_coord, depth):
+def get_median_depth(y_extent, x_extent, y_coord, x_coord, depth, image):
     median_depth = []
     for i in range(y_extent):  # element by element multiplication of the height of the bounding box
         y_val = y_coord + (i - 1)
@@ -386,7 +386,25 @@ def get_median_depth(y_extent, x_extent, y_coord, x_coord, depth):
                 pass
     median = np.median(median_depth)
 
-    return median
+    for i in range(y_extent):  # element by element multiplication of the height of the bounding box
+        y_val = y_coord + (i - 1)
+        for j in range(x_extent):  # element by element multiplication of the width of the bounding box
+            x_val = x_coord + (j - 1)
+            # print(x_val,j)
+            try:  # encapsulating the depth calculation in a try - catch block to prevent value errors
+                calc_depth = depth[
+                    y_val, x_val]  # storing x,y,z values from individual pixels for comparing with the threshold value
+                calc_depth = math.sqrt(
+                    (calc_depth[0] * calc_depth[0]) + (calc_depth[1] * calc_depth[1]) + (
+                            calc_depth[2] * calc_depth[
+                        2])) * 10  # calculating euclidian distance of a pixel
+                if calc_depth < median:  # comparing the pixel distance from the threshold
+                    # print("True")
+                    image[y_val, x_val] = (0, 255, 0, 0)
+            except:
+                pass
+
+    return image
 
 
 def get_color_segmentation_mask(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent, thresh):
@@ -406,18 +424,32 @@ def get_color_segmentation_mask(cropped_image, color, mask, y_coord, y_extent, x
     return mask
 
 
-def get_color(image, bounds):
-    img = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
-    colorRGB = img[(int(img.shape[0]) % 2), (int(img.shape[1]) % 2)]
+def get_color_all(image):
+    image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+    lower = np.array([1, 90, 200], dtype="uint8")
+    upper = np.array([58, 155, 255], dtype="uint8")
+    # find the colors within the specified boundaries and apply
+    # the mask
+    try:
+        mask = cv2.inRange(image, lower, upper)
+    except:
+        pass
 
-    print("RGB values: ", colorRGB)
-    boundaries = [([17, 15, 100], [50, 56, 200]),
-                  ([26, 31, 4], [220, 88, 90]),
-                  ([70, 112, 60], [110, 192, 140]),
-                  ([0, 253, 253], [233, 255, 255]),
-                  ([1, 90, 200], [58, 155, 255]),
+    return mask
+
+
+def get_color(image):
+    img = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+    '''img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+    colorHSV = img[(int(img.shape[0]) % 2), (int(img.shape[1]) % 2)]
+    print("HSV values: ", colorHSV)'''
+    boundaries = [([17, 15, 100], [50, 56, 234]),  # red
+                  ([36, 31, 4], [180, 88, 60]),  # blue
+                  ([45, 76, 20], [85, 235, 180]),  # green
+                  ([20, 150, 210], [90, 255, 255]),  # yellow
                   ([103, 86, 65], [145, 133, 128]),
-                  ([1, 1, 1], [40, 40, 40])]
+                  ([1, 1, 1], [45, 40, 40])]
     count = 0
     for (lower, upper) in boundaries:
         try:
@@ -437,10 +469,8 @@ def get_color(image, bounds):
             elif count == 4:
                 yellow_sum = int(np.sum(mask))
             elif count == 5:
-                orange_sum = int(np.sum(mask))
-            elif count == 6:
                 white_sum = int(np.sum(mask))
-            elif count == 7:
+            elif count == 6:
                 black_sum = int(np.sum(mask))
 
         except:
@@ -448,7 +478,7 @@ def get_color(image, bounds):
 
     # placing the sum in an array to be sorted
 
-    color_arrays = [blue_sum, green_sum, red_sum, yellow_sum, orange_sum, white_sum, black_sum]
+    color_arrays = [blue_sum, green_sum, red_sum, yellow_sum, white_sum, black_sum]
     color_arrays = np.sort(color_arrays)
     print_color = color_arrays[len(color_arrays) - 1]
     if print_color == blue_sum:
@@ -459,8 +489,6 @@ def get_color(image, bounds):
         object_color = "Red"
     elif print_color == yellow_sum:
         object_color = "Yellow"
-    elif print_color == orange_sum:
-        object_color = "Orange"
     elif print_color == white_sum:
         object_color = "White"
     elif print_color == black_sum:
@@ -595,10 +623,6 @@ def main(argv):
             detections = detect(netMain, metaMain, image, thresh)
             # opfileprint(str(detections))
 
-            # Boolean value to ensure, the value is constrained to being sent only once
-            # broadcasts the detected objects data from darknet_zed to Overlord
-            # Boolean value set to false, once the value has printed already
-
             bench_time = time.time()  # setting checkpoint for the loop
             mask = np.zeros((image.shape[0], image.shape[1]))
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
@@ -608,8 +632,6 @@ def main(argv):
                 confidence = detection[1]
                 pstring = label + ": " + str(np.rint(100 * confidence)) + "%"
                 # log.info(pstring)
-                #
-
                 bounds = detection[2]
                 y_extent = int(bounds[3])
                 x_extent = int(bounds[2])
@@ -624,48 +646,29 @@ def main(argv):
                 distance = "{:.2f}".format(distance)
                 distance_data = str(label) + ", position from camera x = " + str(round(x, 2)) + " m,  y= " + str(
                     round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
-                # print(np.median(median_depth),label)
-                if label == "cup":
-                    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
-                    color_string = get_color(cropped_image,
-                                             bounds)  # getting the color output from the color recognition function
-                    # print(masked)
-                    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
-                    try:
-                        color = image[int(bounds[0]), int(bounds[1])]
-                    except:
-                        pass
 
-                    thresh_color = 10
+                if label == "bicycle":
+                    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
+                    # mask[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] = get_color_all(cropped_image)  # getting the color output from the color recognition function
+                    color_string = get_color(cropped_image)
+                    print(image[int(bounds[1]), int(bounds[0])])
+                    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
+
+                    try:
+                        color = image[bounds[0], bounds[1]]
+                    except:
+                        color = 0
+
+                    '''thresh_color = 10
                     mask = get_color_segmentation_mask(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent,
-                                                       thresh_color)
+                                                       thresh_color)'''
                     cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
-                elif label == "bicycle":  # if statement to filter the classes needed for segmentation
+                elif label == "bottle":  # if statement to filter the classes needed for segmentation
 
-                    median = get_median_depth(y_extent, x_extent, y_coord, x_coord,
-                                              depth)  # getting median depth from the function for establishing depth threshold of the bounding box for segmentation
-                    avg_median = median
-                    print(avg_median, avg_median.shape)
-                    for i in range(y_extent):  # element by element multiplication of the height of the bounding box
-                        y_val = y_coord + (i - 1)
-                        for j in range(x_extent):  # element by element multiplication of the width of the bounding box
-                            x_val = x_coord + (j - 1)
-                            # print(x_val,j)
-                            try:  # encapsulating the depth calculation in a try - catch block to prevent value errors
-                                calc_depth = depth[
-                                    y_val, x_val]  # storing x,y,z values from individual pixels for comparing with the threshold value
-                                calc_depth = math.sqrt(
-                                    (calc_depth[0] * calc_depth[0]) + (calc_depth[1] * calc_depth[1]) + (
-                                            calc_depth[2] * calc_depth[
-                                        2])) * 10  # calculating euclidian distance of a pixel
-                                if calc_depth < median:  # comparing the pixel distance from the threshold
-                                    # print("True")
-                                    image[y_val, x_val] = (0, 55, 0, 0)
-                            except:
-                                pass
+                    image = get_median_depth(y_extent, x_extent, y_coord, x_coord, depth, image)
 
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
@@ -684,7 +687,7 @@ def main(argv):
                 point_cloud_data += distance_data
 
             cv2.imshow("ZED", image)
-            cv2.imshow("mask", mask)
+            #cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
             socket_server_status(str(detections), point_cloud_data)
 
