@@ -81,6 +81,14 @@ class METADATA(Structure):
                 ("names", POINTER(c_char_p))]
 
 
+'''
+class DETECTED_MEMORY(Structure):
+    _fields_ = [("label", str),
+                ("x", c_float),
+                ("y", c_float),
+                ("z", c_float),
+                ("Number", c_int)]'''
+
 count = 0
 # lib = CDLL("/home/pjreddie/documents/darknet/libdarknet.so", RTLD_GLOBAL)
 # lib = CDLL("darknet.so", RTLD_GLOBAL)
@@ -373,19 +381,19 @@ def generate_color(meta_path):
 
 def median_average(median, median_max, median_array):
     median_max.append(median)
-    #print(len(median_max))
+    # print(len(median_max))
     while len(median_max) % 10 == 0:
         median_large = np.mean(median_max)
         median_max.clear()
-        median_large = float(round(median_large,2))
+        median_large = float(round(median_large, 2))
         median_array.append(median_large)
-        #print("Values after comparison: ", median_large, median, len(median_max))
+        # print("Values after comparison: ", median_large, median, len(median_max))
         if abs(median_large - median) > 2.00:
             median_array.clear()
         break
 
     try:
-        return median_array[len(median_array)-1]
+        return median_array[len(median_array) - 1]
     except:
         return median
 
@@ -408,8 +416,8 @@ def get_median_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_
                 pass
 
     median = float(round(np.median(median_depth), 2))
-    median_large = median_average(median,median_max,median_array)
-    #print("delay : ",median_large, median)
+    median_large = median_average(median, median_max, median_array)
+    # print("delay : ",median_large, median)
 
     for i in range(y_extent):  # element by element multiplication of the height of the bounding box
         y_val = y_coord + (i - 1)
@@ -426,7 +434,8 @@ def get_median_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_
 
                 if calc_depth < median_large:  # comparing the pixel distance from the threshold
                     # print("True")
-                    image[y_val, x_val] = (0, 0, 255, -100)
+                    image[y_val, x_val] = (0, 0, 255, 0)
+
             except:
                 pass
     return image
@@ -449,7 +458,7 @@ def get_color_segmentation_mask(cropped_image, color, mask, y_coord, y_extent, x
     return mask
 
 
-def get_color_all(image):    # to test the robustness of the color recognition method and can be deleted later if needed
+def get_color_all(image):  # to test the robustness of the color recognition method and can be deleted later if needed
     image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
     lower = np.array([1, 90, 200], dtype="uint8")
     upper = np.array([58, 155, 255], dtype="uint8")
@@ -464,14 +473,15 @@ def get_color_all(image):    # to test the robustness of the color recognition m
 
 
 def get_color(image):
-    img = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)           #converting to a BGR image as the inrange works in only a 3 channel image not a 4 channel
+    img = cv2.cvtColor(image,
+                       cv2.COLOR_BGRA2BGR)  # converting to a BGR image as the inrange works in only a 3 channel image not a 4 channel
 
     boundaries = [([17, 15, 100], [50, 56, 234]),  # red
                   ([36, 31, 4], [180, 88, 60]),  # blue
                   ([45, 76, 20], [85, 235, 180]),  # green
                   ([20, 150, 210], [90, 255, 255]),  # yellow
-                  ([103, 86, 65], [145, 133, 128]),     #black
-                  ([1, 1, 1], [45, 40, 40])]        #white
+                  ([103, 86, 65], [145, 133, 128]),  # black
+                  ([1, 1, 1], [45, 40, 40])]  # white
     count = 0
     for (lower, upper) in boundaries:
         try:
@@ -501,7 +511,7 @@ def get_color(image):
     # placing the sum in an array to be sorted
 
     color_arrays = [blue_sum, green_sum, red_sum, yellow_sum, white_sum, black_sum]
-    color_arrays = np.sort(color_arrays)            #sorting an array to present the most dominant colour as the output
+    color_arrays = np.sort(color_arrays)  # sorting an array to present the most dominant colour as the output
     print_color = color_arrays[len(color_arrays) - 1]
     if print_color == blue_sum:
         object_color = "Blue"
@@ -516,10 +526,60 @@ def get_color(image):
     elif print_color == black_sum:
         object_color = "Black"
 
-    return object_color             #returning the highest mask value as the colour
+    return object_color  # returning the highest mask value as the colour
+
+
+def get_positional_data(camera_pose, py_translation):
+    rotation = camera_pose.get_rotation_vector()
+    rx = round(rotation[0], 2)
+    ry = round(rotation[1], 2)
+    rz = round(rotation[2], 2)
+
+    translation = camera_pose.get_translation(py_translation)
+    tx = round(translation.get()[0], 2)
+    ty = round(translation.get()[1], 2)
+    tz = round(translation.get()[2], 2)
+
+    text_translation = str((tx, ty, tz))
+    text_rotation = str((rx, ry, rz))
+    return text_translation, text_rotation
+
+def get_detected_objects(detected_objects, label, bounds, x, y, z):
+    count_object = 0
+    if len(detected_objects) == 0:
+
+        detected_objects.append("neglect")
+    else:
+        for detected in detected_objects:
+            # print(detected, int(bounds[0]),int(bounds[1]), detected[1], detected[2])
+            detected_label = detected[0].split("/")
+            #print(detected_label)
+            if label != detected[0]:
+                pass
+            elif label == detected[0]:
+                if abs(x - int(detected[1]))%10 == 0:
+                    if abs(y - int(detected[2]))%10 == 0:
+                        pass
+                elif abs(x - int(detected[1]))%10 != 0:
+                    if abs(y - int(detected[2]))%10 != 0:
+                        count_object += 1
+
+    if count_object == 0:
+        detected_o = [label, int(bounds[0]), int(bounds[1]), round(x, 3), round(y, 3),
+                          round(z, 3)]
+        detected_objects.append(detected_o)
+    '''elif count_object == 1:
+        detected_o = [label + "/" + str(count_object), int(bounds[0]), int(bounds[1]), round(x, 3), round(y, 3),
+                      round(z, 3)]
+        detected_objects.append(detected_o)'''
+
+    count_object = 0
+
+    return detected_objects
+
 
 def main(argv):
-    thresh = 0.25
+    thresh = 0.5
     darknet_path = "../libdarknet/"
     config_path = darknet_path + "cfg/yolov3.cfg"
     weight_path = "yolov3.weights"
@@ -554,16 +614,19 @@ def main(argv):
 
     input_type = sl.InputType()
     if svo_path is not None:
-        log.info("SVO file : " + svo_path)
+        # log.info("SVO file : " + svo_path)
         input_type.set_from_svo_file(svo_path)
     else:
         # Launch camera by id
         input_type.set_from_camera_id(zed_id)
 
     init = sl.InitParameters(input_t=input_type)
+    init.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
+    init.sdk_verbose = True
     init.coordinate_units = sl.UNIT.METER
-    init.depth_minimum_distance = 0.15
+    init.depth_minimum_distance = 0.20
     init.camera_resolution = sl.RESOLUTION.HD720
+    # init.depth_mode = sl.DEPTH_MODE.QUALITY
     init.camera_fps = 60
 
     cam = sl.Camera()
@@ -627,17 +690,24 @@ def main(argv):
     log.info("Running...")
     processes = []
     avg_median = []
+    detected_objects = []
     key = ''
-    while key != 27:  # for 'q' key
+    sensors_data = sl.SensorsData()
+    '''transform = sl.Transform()
+    tracking_params = sl.PositionalTrackingParameters(transform)    #initialises positional tracking
+    cam.enable_positional_tracking(tracking_params)     #enables positional tracking'''
+    count_o = 1
+    while key != 113:  # for 'q' key
         point_cloud_data = ""
         probs = time.time()
         err = cam.grab(runtime)
+
+        camera_pose = sl.Pose()
         if err == sl.ERROR_CODE.SUCCESS:
             cam.retrieve_image(mat, sl.VIEW.LEFT)
             image = mat.get_data()
-
-            cam.retrieve_measure(
-                point_cloud_mat, sl.MEASURE.XYZRGBA)
+            py_translation = sl.Translation()
+            cam.retrieve_measure(point_cloud_mat, sl.MEASURE.XYZRGBA)
             depth = point_cloud_mat.get_data()
             # Do the detection
             start_time = time.time()  # start time of the loop
@@ -645,9 +715,15 @@ def main(argv):
             # opfileprint(str(detections))
 
             bench_time = time.time()  # setting checkpoint for the loop
-            mask = np.zeros((image.shape[0], image.shape[1]))
-            # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
+            mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))
 
+            tracking_state = cam.get_position(camera_pose,
+                                              sl.REFERENCE_FRAME.WORLD)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
+            if tracking_state == sl.POSITIONAL_TRACKING_STATE.OK:  # activates only when the poisitional tracking state is in 'OK' state
+                text_translation, text_rotation = get_positional_data(camera_pose,
+                                                                      py_translation)  # gets translation and rotation data as a string
+
+            # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
             for detection in detections:
                 label = detection[0]
                 confidence = detection[1]
@@ -661,18 +737,24 @@ def main(argv):
                 y_coord = int(bounds[1] - bounds[3] / 2)
                 # boundingBox = [[x_coord, y_coord], [x_coord, y_coord + y_extent], [x_coord + x_extent, y_coord + y_extent], [x_coord + x_extent, y_coord]]
                 thickness = 1
-
                 x, y, z = get_object_depth(depth, bounds)
                 distance = math.sqrt(x * x + y * y + z * z)
                 distance = "{:.2f}".format(distance)
                 distance_data = str(label) + ", position from camera x = " + str(round(x, 2)) + " m,  y= " + str(
                     round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
+                # print(distance_data, label)
+
+                # detected_objects.append(detected_o)
+                # print(detected_o)
+                # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
+
+                detected_objects = get_detected_objects(detected_objects, label, bounds, x, y, z)
 
                 if label == "bicycle":  # a binding statement to direct colour recognition
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
-                                x_coord + x_extent)]  # cropping image to the size of the object bounding box
+                            x_coord + x_extent)]  # cropping image to the size of the object bounding box
                     # mask[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] = get_color_all(cropped_image)  # getting the color output from the color recognition function
-                    color_string = get_color(cropped_image)  #getting colour output from the function as a string
+                    color_string = get_color(cropped_image)  # getting colour output from the function as a string
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
 
                     try:
@@ -682,23 +764,21 @@ def main(argv):
 
                     '''thresh_color = 10
                     mask = get_color_segmentation_mask(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent,
-                                                       thresh_color)'''         #segmentation based on colour with adaptive threshold range
+                                                       thresh_color)'''  # segmentation based on colour with adaptive threshold range
 
                     cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
-                if label == "apple":  # if statement to filter the classes needed for segmentation
-
-                    image = get_median_depth(y_extent, x_extent, y_coord, x_coord, depth, image, processes, avg_median)
-
+                if label == "cup":  # if statement to filter the classes needed for segmentation
+                    # print(x, y, z, len(detected_objects))
+                    # image = get_median_depth(y_extent, x_extent, y_coord, x_coord, depth, image, processes, avg_median)
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
 
                 else:  # j += 1
-
                     cv2.putText(image, label + " " + (str(distance) + " m"),  # pasting label on top of detected object
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
@@ -711,11 +791,13 @@ def main(argv):
             cv2.imshow("ZED", image)
             # cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
+            print(detected_objects)
             socket_server_status(str(detections), point_cloud_data)
+            # detected_objects.clear()
 
             # log.info("Detection time: {}".format(bench_time - start_time))
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            #log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
+            # log.info("Output FPS: {}".format(1.0 / (time.time() - probs)))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
