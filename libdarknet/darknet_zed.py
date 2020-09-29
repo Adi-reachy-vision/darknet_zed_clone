@@ -536,37 +536,54 @@ def get_positional_data(camera_pose, py_translation):
     rz = round(rotation[2], 2)
 
     translation = camera_pose.get_translation(py_translation)
-    tx = round(translation.get()[0], 2)
-    ty = round(translation.get()[1], 2)
-    tz = round(translation.get()[2], 2)
+    tx = round(translation.get()[0], 3)
+    ty = round(translation.get()[1], 3)
+    tz = round(translation.get()[2], 3)
 
     text_translation = str((tx, ty, tz))
     text_rotation = str((rx, ry, rz))
-    return text_translation, text_rotation
+    return tx, ty, tz
 
-def get_detected_objects(detected_objects, label, bounds, x, y, z):
+
+def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, py_translation):
     count_object = 0
-    if len(detected_objects) == 0:
 
-        detected_objects.append("neglect")
+    tx, ty, tz = get_positional_data(camera_pose, py_translation)
+
+    if len(detected_objects) == 0:
+        detected_o = [random.randint(1, 1000000000), label, round(x, 3) - tx, round(y, 3) - ty,
+                      round(z, 3) - tz]
+        detected_objects.append(detected_o)
     else:
         for detected in detected_objects:
             # print(detected, int(bounds[0]),int(bounds[1]), detected[1], detected[2])
-            detected_label = detected[0].split("/")
-            #print(detected_label)
-            if label != detected[0]:
+            detected_label = detected[1].split("/")
+            # print(detected_label)
+            if label != detected_label[0]:
                 pass
-            elif label == detected[0]:
-                if abs(x - int(detected[1]))%10 == 0:
-                    if abs(y - int(detected[2]))%10 == 0:
+            elif label == detected_label[0]:
+                if abs(x - int(detected[2])) % 50 == 0:
+                    if abs(y - int(detected[3])) % 50 == 0:
                         pass
-                elif abs(x - int(detected[1]))%10 != 0:
-                    if abs(y - int(detected[2]))%10 != 0:
+                elif abs(x - int(detected[2])) % 50 != 0:
+                    if abs(y - int(detected[3])) % 50 != 0:
                         count_object += 1
+                        '''print(abs(tx - detected[2]), tx)
+                        print(abs(ty - detected[3]), ty)
+                        print(abs(tz - detected[4]), tz)'''
+                if abs(tx - float(detected[2])) % 0 == 0 or abs(ty - float(detected[3])) % 0 == 0 or abs(
+                    tz - float(detected[4])) % 0 == 0:
+                    pass
+                else:
+                    id = detected[0]
+                    detected_objects.remove(detected)
+                    detected_o = [id, label, round(x - tx, 3), round(y- ty, 3),
+                                  round(z - tz, 3)]
+                    detected_objects.append(detected_o)
 
     if count_object == 0:
-        detected_o = [label, int(bounds[0]), int(bounds[1]), round(x, 3), round(y, 3),
-                          round(z, 3)]
+        detected_o = [random.randint(1, 1000000000), label, round(x - tx, 3), round(y - ty, 3),
+                      round(z - tz, 3)]
         detected_objects.append(detected_o)
     '''elif count_object == 1:
         detected_o = [label + "/" + str(count_object), int(bounds[0]), int(bounds[1]), round(x, 3), round(y, 3),
@@ -579,7 +596,7 @@ def get_detected_objects(detected_objects, label, bounds, x, y, z):
 
 
 def main(argv):
-    thresh = 0.5
+    thresh = 0.7
     darknet_path = "../libdarknet/"
     config_path = darknet_path + "cfg/yolov3.cfg"
     weight_path = "yolov3.weights"
@@ -626,7 +643,7 @@ def main(argv):
     init.coordinate_units = sl.UNIT.METER
     init.depth_minimum_distance = 0.20
     init.camera_resolution = sl.RESOLUTION.HD720
-    # init.depth_mode = sl.DEPTH_MODE.QUALITY
+    init.depth_mode = sl.DEPTH_MODE.QUALITY
     init.camera_fps = 60
 
     cam = sl.Camera()
@@ -693,9 +710,9 @@ def main(argv):
     detected_objects = []
     key = ''
     sensors_data = sl.SensorsData()
-    '''transform = sl.Transform()
-    tracking_params = sl.PositionalTrackingParameters(transform)    #initialises positional tracking
-    cam.enable_positional_tracking(tracking_params)     #enables positional tracking'''
+    transform = sl.Transform()
+    tracking_params = sl.PositionalTrackingParameters(transform)  # initialises positional tracking
+    cam.enable_positional_tracking(tracking_params)  # enables positional tracking
     count_o = 1
     while key != 113:  # for 'q' key
         point_cloud_data = ""
@@ -720,8 +737,8 @@ def main(argv):
             tracking_state = cam.get_position(camera_pose,
                                               sl.REFERENCE_FRAME.WORLD)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
             if tracking_state == sl.POSITIONAL_TRACKING_STATE.OK:  # activates only when the poisitional tracking state is in 'OK' state
-                text_translation, text_rotation = get_positional_data(camera_pose,
-                                                                      py_translation)  # gets translation and rotation data as a string
+                tx, ty, tz = get_positional_data(camera_pose,
+                                                 py_translation)  # gets translation and rotation data as a string
 
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
             for detection in detections:
@@ -748,7 +765,8 @@ def main(argv):
                 # print(detected_o)
                 # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
 
-                detected_objects = get_detected_objects(detected_objects, label, bounds, x, y, z)
+                detected_objects = get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose,
+                                                        py_translation)
 
                 if label == "bicycle":  # a binding statement to direct colour recognition
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
