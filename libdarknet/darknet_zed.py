@@ -566,7 +566,7 @@ def main(argv):
             cv2.imshow("ZED", image)
             # cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
-            #print(detected_objects)
+            print(detected_objects)
             Bridge.socket_server_status(str(detections), point_cloud_data)
             # detected_objects.clear()
             output = time.time() - probs

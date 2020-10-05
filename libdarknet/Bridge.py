@@ -195,14 +195,19 @@ def get_positional_data(camera_pose, py_translation):
     return tx, ty, tz
 
 
-def get_similarity(cropped_image, id):
-    image_prime = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2GRAY)
-    mem_image = cv2.imread("memory_images/{}.jpg".format(id))
-    mem_image = cv2.cvtColor(mem_image, cv2.COLOR_BGRA2GRAY)
-    image_prime = cv2.resize(image_prime, (mem_image.shape[1], mem_image.shape[0]))
-    ssim = compare_ssim(mem_image, image_prime)
+def get_similarity(cropped_image, new_id):
+    try:
 
-    return ssim
+        image_prime = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2GRAY)
+        mem_image = cv2.imread("memory_images/{}.jpg".format(new_id), 0)
+        # mem_image = cv2.cvtColor(mem_image, cv2.COLOR_BGRA2GRAY)
+        image_prime = cv2.resize(image_prime, (mem_image.shape[1], mem_image.shape[0]))
+        ssim = compare_ssim(mem_image, image_prime)
+        ssim = float(round(ssim, 3))
+        return ssim
+    except:
+        return None
+
 
 
 def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, py_translation, cropped_image):
@@ -210,38 +215,35 @@ def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, 
 
     tx, ty, tz = get_positional_data(camera_pose, py_translation)
 
-    if len(detected_objects) == 0:
-        '''detected_o = [random.randint(1, 1000000000), label, round(x, 3) - tx, round(y, 3) - ty,
-                      round(z, 3) - tz]'''
-        detected_o = [0, str(0), 0, 0, 0]
-        detected_objects.append(detected_o)
-    else:
+    if len(detected_objects) >= 0:
+
         for detected in detected_objects:
-            # print(detected, int(bounds[0]),int(bounds[1]), detected[1], detected[2])
-            detected_label = detected[1].split("/")
-            # print(detected_label)
-            if label != detected_label[0]:
+            if label != detected[1]:
                 pass
-            elif label == detected_label[0]:
-                if abs(x - int(detected[2])) % 50 == 0 and abs(y - int(detected[3])) % 50 == 0:
+            elif label == detected[1]:
+                if abs(x - int(detected[2])) % 0.50 == 0 and abs(y - int(detected[3])) % 0.50 == 0 and abs(
+                        y - int(detected[4])) % 0.50 == 0:
                     pass
-                elif abs(x - int(detected[2])) % 50 != 0 and abs(y - int(detected[3])) % 50 != 0:
-                    id = detected[0]
-                    ssim = get_similarity(cropped_image, id)
-                    ssim = float(round(ssim,3))
-                    print(label, ssim)
-                    '''print(abs(tx - detected[2]), tx)
-                    print(abs(ty - detected[3]), ty)
-                    print(abs(tz - detected[4]), tz)'''
-                if abs(tx - float(detected[2])) % float(detected[2]) == 0 or abs(ty - float(detected[3])) % 0 == float(
-                        detected[3]) or abs(
-                        tz - float(detected[4])) % float(detected[4]) == 0:
+                elif abs(x - int(detected[2])) % 0.50 != 0 and abs(y - int(detected[3])) % 0.50 != 0 and abs(
+                        y - int(detected[4])) % 0.50 != 0:
+                    count_object += 1
+                    '''new_id = detected[0]
+                    cv2.imwrite("memory_images/{}.jpg".format(new_id), cropped_image)
+                    ssim = get_similarity(cropped_image, new_id)
+                    if ssim < 0.5:
+                        id = random.randint(1, 1000000000)
+                        detected_o = [id, label, round(x - tx, 3), round(y - ty, 3),
+                                      round(z + tz, 3)]
+                        detected_objects.append(detected_o)
+                    print(label, ssim)'''
+                '''if abs(tx - float(detected[2])) % float(detected[2]) == 0 or abs(ty - float(detected[3])) % 0 == float(
+                        detected[3]) or abs(tz - float(detected[4])) % float(detected[4]) == 0:'''  #activate in case the camera is constantly moving
+                if abs(tx - float(detected[2])) == 0 or abs(ty - float(detected[3])) == 0 or abs(
+                        tz - float(detected[4])) == 0:  #when the camera is stationery or object is moving
                     pass
                 else:
                     id = detected[0]
                     detected_objects.remove(detected)
-                    '''detected_o = [id, label, round(x - tx, 3), round(y- ty, 3),
-                                  round(z - tz, 3)]'''
                     detected_o = [id, label, round(x, 3), round(y, 3),
                                   round(z, 3)]
                     detected_objects.append(detected_o)
