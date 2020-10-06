@@ -572,7 +572,7 @@ def main(argv):
             output = time.time() - probs
             # log.info("Detection time: {}".format(bench_time - start_time))
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            #log.info("Output FPS: {}".format((time.time() - probs)))
+            # log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()

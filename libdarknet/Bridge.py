@@ -195,11 +195,12 @@ def get_positional_data(camera_pose, py_translation):
     return tx, ty, tz
 
 
-def get_similarity(cropped_image, new_id):
-    image_prime = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2GRAY)
-    mem_image = cv2.imread("memory_images/{}.jpg".format(new_id), 0)
-    image_prime = cv2.resize(image_prime, (mem_image.shape[1], mem_image.shape[0]))
-    ssim = compare_ssim(mem_image, image_prime)
+def get_similarity(cropped_image, duplicate_id):
+    cropped_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2BGR)
+    mem_image = cv2.imread("memory_images/{}.jpg".format(duplicate_id))
+    #print(cropped_image.shape, mem_image.shape)
+    cropped_image = cv2.resize(cropped_image, (mem_image.shape[1], mem_image.shape[0]))
+    ssim = compare_ssim(cropped_image, mem_image, multichannel=True)
     ssim = float(round(ssim, 3))
     return ssim
 
@@ -223,7 +224,9 @@ def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, 
                 elif abs(x - int(detected[2])) % 0.50 != 0 and abs(y - int(detected[3])) % 0.50 != 0 and abs(
                         y - int(detected[4])) % 0.50 != 0:
                     count_object += 1
-                    new_id.append(detected[0])
+                    array_valueid = detected[0]
+                    new_id.append(array_valueid)
+                    #print(new_id)
                 '''if abs(tx - float(detected[2])) % float(detected[2]) == 0 or abs(ty - float(detected[3])) % 0 == float(
                         detected[3]) or abs(tz - float(detected[4])) % float(detected[4]) == 0:'''  #activate in case the camera is constantly moving
                 if abs(tx - float(detected[2])) == 0 or abs(ty - float(detected[3])) == 0 or abs(
