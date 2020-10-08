@@ -1,3 +1,4 @@
+import io
 import math
 import random
 import socket
@@ -200,7 +201,7 @@ def get_similarity(cropped_image, duplicate_id):
     try:
         cropped_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2BGR)
         mem_image = cv2.imread("memory_images/{}.jpg".format(duplicate_id))
-        #print(cropped_image.shape, mem_image.shape)
+        # print(cropped_image.shape, mem_image.shape)
         cropped_image = cv2.resize(cropped_image, (mem_image.shape[1], mem_image.shape[0]))
         ssim = compare_ssim(cropped_image, mem_image, multichannel=True)
         ssim = float(round(ssim, 3))
@@ -209,12 +210,12 @@ def get_similarity(cropped_image, duplicate_id):
 
     return ssim
 
-def images_are_similar(cropped_image, duplicate_id):
 
+def images_are_similar(cropped_image, duplicate_id):
     error = 90
-    h1 = Image.open(cropped_image)
-    h1 = cv2.cvtColor(h1,cv2.COLOR_BGRA2BGR)
-    h2 = Image.open("memory_images/{}.jpg".format(duplicate_id))
+    h1 = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2BGR)
+    h2 = cv2.imread("memory_images/{}.jpg".format(duplicate_id))
+    print(h2.shape)
     diff = ImageChops.difference(h1, h2).histogram()
     sq = (value * (i % 256) ** 2 for i, value in enumerate(diff))
     sum_squares = sum(sq)
@@ -237,43 +238,45 @@ def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, 
             if label != detected[1]:
                 pass
             elif label == detected[1]:
-                if abs(x - int(detected[2])) % 0.50 == 0 and abs(y - int(detected[3])) % 0.50 == 0 and abs(
-                        y - int(detected[4])) % 0.50 == 0:
+                if abs(x - int(detected[2])) % 0.050 == 0 and abs(y - int(detected[3])) % 0.050 == 0 and abs(
+                        y - int(detected[4])) % 0.050 == 0:
                     pass
-                elif abs(x - int(detected[2])) % 0.50 != 0 and abs(y - int(detected[3])) % 0.50 != 0 and abs(
-                        y - int(detected[4])) % 0.50 != 0:
+                elif abs(x - int(detected[2])) % 0.050 != 0 and abs(y - int(detected[3])) % 0.050 != 0 and abs(
+                        y - int(detected[4])) % 0.050 != 0:
                     count_object += 1
-                    array_valueid = detected[0]
+                    array_valueid = [detected[0], detected[2], detected[3], detected[4]]
                     new_id.append(array_valueid)
-                    #print(new_id)
-                if abs(tx - float(detected[2])) % float(detected[2]) == 0 or abs(ty - float(detected[3])) % 0 == float(
-                        detected[3]) or abs(tz - float(detected[4])) % float(detected[4]) == 0:  #activate in case the camera is constantly moving
-                    pass
-                else:
-                    id = detected[0]
-                    detected_objects.remove(detected)
-                    detected_o = [id, label, round(x, 3), round(y, 3),
-                                  round(z, 3)]
-                    detected_objects.append(detected_o)
+                    # print(new_id)
+            if abs(tx - float(detected[2])) % float(detected[2]) == 0 or abs(ty - float(detected[3])) % 0 == float(
+                    detected[3]) or abs(tz - float(detected[4])) % float(
+                detected[4]) == 0:  # activate in case the camera is constantly moving
+                pass
+            else:
+                id = detected[0]
+                detected_objects.remove(detected)
+                detected_o = [id, label, round(x, 3), round(y, 3),
+                              round(z, 3)]
+                detected_objects.append(detected_o)
 
-    if count_object == 0:
+    if len(new_id) == 0:
         id = random.randint(1, 1000000000)
         detected_o = [id, label, round(x - tx, 3), round(y - ty, 3),
                       round(z + tz, 3)]
         detected_objects.append(detected_o)
         cv2.imwrite("memory_images/{}.jpg".format(id), cropped_image)
 
-    elif count_object == 1:
+    else:
         for duplicate_id in new_id:
-
-            #ssim = get_similarity(cropped_image, duplicate_id)
-            similar = images_are_similar(cropped_image, duplicate_id)
-            if similar == False:
+            if abs(x - int(duplicate_id[1])) > 0.5 and abs(y - int(duplicate_id[2])) > 0.5 and abs(
+                    y - int(duplicate_id[3])) > 0.5:
                 dup_obj_id = random.randint(1, 1000000000)
                 detected_o = [dup_obj_id, label, round(x - tx, 3), round(y - ty, 3),
                               round(z + tz, 3)]
                 detected_objects.append(detected_o)
-                cv2.imwrite("memory_images/{}.jpg".format(dup_obj_id), cropped_image)
+                break
+            break
+
+
 
     count_object = 0
 
