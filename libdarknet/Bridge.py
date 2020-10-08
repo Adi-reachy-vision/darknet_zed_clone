@@ -4,6 +4,7 @@ import socket
 from skimage.measure import compare_ssim
 import numpy as np
 import cv2
+from PIL import Image, ImageChops
 
 
 def socket_server_status(
@@ -196,14 +197,32 @@ def get_positional_data(camera_pose, py_translation):
 
 
 def get_similarity(cropped_image, duplicate_id):
-    cropped_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2BGR)
-    mem_image = cv2.imread("memory_images/{}.jpg".format(duplicate_id))
-    #print(cropped_image.shape, mem_image.shape)
-    cropped_image = cv2.resize(cropped_image, (mem_image.shape[1], mem_image.shape[0]))
-    ssim = compare_ssim(cropped_image, mem_image, multichannel=True)
-    ssim = float(round(ssim, 3))
+    try:
+        cropped_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2BGR)
+        mem_image = cv2.imread("memory_images/{}.jpg".format(duplicate_id))
+        #print(cropped_image.shape, mem_image.shape)
+        cropped_image = cv2.resize(cropped_image, (mem_image.shape[1], mem_image.shape[0]))
+        ssim = compare_ssim(cropped_image, mem_image, multichannel=True)
+        ssim = float(round(ssim, 3))
+    except:
+        ssim = 0.99
+
     return ssim
 
+def images_are_similar(cropped_image, duplicate_id):
+
+    error = 90
+    h1 = Image.open(cropped_image)
+    h1 = cv2.cvtColor(h1,cv2.COLOR_BGRA2BGR)
+    h2 = Image.open("memory_images/{}.jpg".format(duplicate_id))
+    diff = ImageChops.difference(h1, h2).histogram()
+    sq = (value * (i % 256) ** 2 for i, value in enumerate(diff))
+    sum_squares = sum(sq)
+    rms = math.sqrt(sum_squares / float(h1.size[0] * h1.size[1]))
+
+    # Error is an arbitrary value, based on values when
+    # comparing 2 rotated images & 2 different images.
+    return rms < error
 
 
 def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, py_translation, cropped_image):
@@ -227,10 +246,8 @@ def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, 
                     array_valueid = detected[0]
                     new_id.append(array_valueid)
                     #print(new_id)
-                '''if abs(tx - float(detected[2])) % float(detected[2]) == 0 or abs(ty - float(detected[3])) % 0 == float(
-                        detected[3]) or abs(tz - float(detected[4])) % float(detected[4]) == 0:'''  #activate in case the camera is constantly moving
-                if abs(tx - float(detected[2])) == 0 or abs(ty - float(detected[3])) == 0 or abs(
-                        tz - float(detected[4])) == 0:  #when the camera is stationery or object is moving
+                if abs(tx - float(detected[2])) % float(detected[2]) == 0 or abs(ty - float(detected[3])) % 0 == float(
+                        detected[3]) or abs(tz - float(detected[4])) % float(detected[4]) == 0:  #activate in case the camera is constantly moving
                     pass
                 else:
                     id = detected[0]
@@ -249,9 +266,9 @@ def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, 
     elif count_object == 1:
         for duplicate_id in new_id:
 
-            ssim = get_similarity(cropped_image, duplicate_id)
-
-            if ssim < 0.5:
+            #ssim = get_similarity(cropped_image, duplicate_id)
+            similar = images_are_similar(cropped_image, duplicate_id)
+            if similar == False:
                 dup_obj_id = random.randint(1, 1000000000)
                 detected_o = [dup_obj_id, label, round(x - tx, 3), round(y - ty, 3),
                               round(z + tz, 3)]
