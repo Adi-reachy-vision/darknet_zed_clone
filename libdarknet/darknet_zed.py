@@ -11,12 +11,8 @@ Windows Python 2.7 version: https://github.com/AlexeyAB/darknet/blob/fc496d52bf2
 @date: 20180911
 """
 # pylint: disable=R, W0401, W0614, W0703
-import multiprocessing
 import os
-import queue
-import socketserver
 import sys
-import threading
 import time
 import logging
 import random
@@ -28,10 +24,6 @@ from ctypes import *
 import numpy as np
 import cv2
 import pyzed.sl as sl
-import socket
-
-from threading import Thread
-
 import Bridge
 
 log = logging.getLogger(__name__)
@@ -352,7 +344,7 @@ def generate_color(meta_path):
 
 
 def main(argv):
-    thresh = 0.7
+    thresh = 0.5
     darknet_path = "../libdarknet/"
     config_path = darknet_path + "cfg/yolov3.cfg"
     weight_path = "yolov3.weights"
