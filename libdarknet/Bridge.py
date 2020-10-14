@@ -230,7 +230,7 @@ def images_are_similar(cropped_image, duplicate_id):
     return rms < error
 
 
-def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, py_translation, cropped_image):
+def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_translation, cropped_image):
     count_object = 0
     new_id = []
     new_id_alt = []
@@ -238,6 +238,7 @@ def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, 
     if len(detected_objects) >= 0:
 
         for detected in detected_objects:
+            new_id_alt.append(detected[1])
             if label != detected[1]:
                 pass
             elif label == detected[1]:
@@ -246,10 +247,12 @@ def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, 
                     array_valueid_alt = [detected[0], detected[2], detected[3], detected[4], label]
                     new_id_alt.append(array_valueid_alt)
                 elif abs(x - int(detected[2])) % 0.050 != 0 and abs(y - int(detected[3])) % 0.050 != 0 and abs(
-                        y - int(detected[4])) % 0.050 != 0:
+                        z - int(detected[4])) % 0.050 != 0:
                     count_object += 1
-                    array_valueid = [detected[0], detected[2], detected[3], detected[4], label]
-                    new_id.append(array_valueid)
+
+                    array_valueid = [label, x, y, z]
+                    if array_valueid not in new_id:
+                        new_id.append(array_valueid)
                     # print(new_id)
             if abs(tx - float(detected[2])) % float(detected[2]) == 0 or abs(ty - float(detected[3])) % 0 == float(
                     detected[3]) or abs(tz - float(detected[4])) % float(
@@ -260,26 +263,30 @@ def get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose, 
                 label_new = detected[1]
                 detected_objects.remove(detected)
                 detected_o = [id_new, label_new, round(x - tx, 3), round(y - ty, 3),
-                                  round(z + tz, 3)]
+                              round(z + tz, 3), "change"]
                 detected_objects.append(detected_o)
 
-    if len(new_id) == 0:
+    if label not in new_id_alt:
         id = random.randint(1, 1000000000)
         detected_o = [id, label, round(x - tx, 3), round(y - ty, 3),
-                      round(z + tz, 3)]
+                      round(z + tz, 3), "orig"]
         detected_objects.append(detected_o)
-        #cv2.imwrite("memory_images/{}.jpg".format(id), cropped_image)
+        # cv2.imwrite("memory_images/{}.jpg".format(id), cropped_image)
 
     else:
-        for duplicate_id in new_id:
-            #print(new_id, " other side ",new_id_alt)
-            if label == duplicate_id[4]:
-                if abs(x - int(duplicate_id[1])) > 0.5 and abs(y - int(duplicate_id[2])) > 0.5 and abs(
-                        y - int(duplicate_id[3])) > 0.5:
-                    dup_obj_id = random.randint(1, 1000000000)
-                    detected_o = [dup_obj_id, label, round(x - tx, 3), round(y - ty, 3),
-                                  round(z - tz, 3), "new"]
-                    detected_objects.append(detected_o)
 
-    count_object = 0
+        for entry in new_id:
+            print(new_id)
+            for detected in detected_objects:
+                exist_value = False
+                if detected[1] == entry[0]:
+                    if (abs(entry[1]) - abs(detected[2])) > 0.2 or (abs(entry[2]) - abs(detected[3])) > 0.2 or (
+                            abs(entry[3]) - abs(detected[4])) > 0.2:
+                        exist_value = True
+            if exist_value is True:
+                id = random.randint(1, 1000000000)
+                detected_o = [id, entry[0], round((entry[1] - tx), 3), round((entry[2] - ty), 3),
+                              round((entry[3] - tz), 3), "new"]
+                detected_objects.append(detected_o)
+
     return detected_objects

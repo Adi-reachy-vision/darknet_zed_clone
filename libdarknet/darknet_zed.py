@@ -514,7 +514,7 @@ def main(argv):
                 # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
                 cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                         x_coord + x_extent)]
-                detected_objects = Bridge.get_detected_objects(detected_objects, label, bounds, x, y, z, camera_pose,
+                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,
                                                         py_translation, cropped_image)
 
                 if label == "bicycle":  # a binding statement to direct colour recognition
