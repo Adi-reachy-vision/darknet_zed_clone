@@ -455,7 +455,9 @@ def main(argv):
     log.info("Running...")
     processes = []
     avg_median = []
+    median_max = []
     detected_objects = []
+    grasp_y_delay = []
     key = ''
     sensors_data = sl.SensorsData()
     '''transform = sl.Transform()
@@ -514,7 +516,7 @@ def main(argv):
                 # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
                 cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                         x_coord + x_extent)]
-                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image)
+                #detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image)
 
                 if label == "bicycle":  # a binding statement to direct colour recognition
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
@@ -537,7 +539,7 @@ def main(argv):
                                 2)  # pasting label on top of the segmentation mask
                 if label == "cup":  # if statement to filter the classes needed for segmentation
                     # print(x, y, z, len(detected_objects))
-                    #image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, processes, avg_median)
+                    image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay)
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
@@ -556,7 +558,7 @@ def main(argv):
             cv2.imshow("ZED", image)
             # cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
-            print(detected_objects)
+            #print(detected_objects)
             Bridge.socket_server_status(str(detections), point_cloud_data)
             # detected_objects.clear()
             output = time.time() - probs
