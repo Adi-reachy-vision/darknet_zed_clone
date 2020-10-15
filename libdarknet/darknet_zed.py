@@ -458,9 +458,9 @@ def main(argv):
     detected_objects = []
     key = ''
     sensors_data = sl.SensorsData()
-    transform = sl.Transform()
+    '''transform = sl.Transform()
     tracking_params = sl.PositionalTrackingParameters(transform)  # initialises positional tracking
-    cam.enable_positional_tracking(tracking_params)  # enables positional tracking
+    cam.enable_positional_tracking(tracking_params)  # enables positional tracking'''
     count_o = 1
     while key != 113:  # for 'q' key
         point_cloud_data = ""
@@ -514,13 +514,12 @@ def main(argv):
                 # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
                 cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                         x_coord + x_extent)]
-                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,
-                                                        py_translation, cropped_image)
+                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image)
 
                 if label == "bicycle":  # a binding statement to direct colour recognition
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                             x_coord + x_extent)]  # cropping image to the size of the object bounding box
-                    # mask[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] = get_color_all(cropped_image)  # getting the color output from the color recognition function
+                    # mask[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] = color_test(cropped_image)  # getting the color output from the color recognition function
                     color_string = Bridge.get_color(cropped_image)  # getting colour output from the function as a string
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
 
@@ -530,8 +529,7 @@ def main(argv):
                         color = 0
 
                     thresh_color = 10
-                    mask = Bridge.get_color_segmentation_mask(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent,
-                                                       thresh_color)  # segmentation based on colour with adaptive threshold range
+                    #mask = Bridge.image_segmentation_colour(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent,thresh_color)  # segmentation based on colour with adaptive threshold range
 
                     cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
@@ -539,7 +537,7 @@ def main(argv):
                                 2)  # pasting label on top of the segmentation mask
                 if label == "cup":  # if statement to filter the classes needed for segmentation
                     # print(x, y, z, len(detected_objects))
-                    #image = Bridge.get_median_depth(y_extent, x_extent, y_coord, x_coord, depth, image, processes, avg_median)
+                    #image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, processes, avg_median)
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
