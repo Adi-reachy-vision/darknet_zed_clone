@@ -54,6 +54,7 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
      is filled with red colour.'''
     median_depth = [] #initialising an array to store the depth of all pixels in the bounding box
     grasp_array_y = []
+    grasp_array_x = []
     min_object_depth = []
     height = 0
     for i in range(y_extent):  # element by element multiplication of the height of the bounding box
@@ -77,10 +78,8 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
                                                                     #iterations of stored average distances of the object in the bounding box
 
     try:
-        y_grasp = grasp_y_delay[len(grasp_y_delay) - 1] # the number of y-axis coordinates which happen to be lesser than the median depth of the object in the previous frame
-        height = height/2 #height of the bounding box
-        y_grasp = y_grasp - height # the ideal point to grab the object in the y-axis
-        #print(y_grasp)
+        y_grasp = grasp_y_delay[len(grasp_y_delay) - 1] # the y-axis coordinates which happen to be lesser than the
+                                                        # median depth of the object in the previous frame
     except:
         y_grasp = y_coord #in case of an error return the y_coord value
 
@@ -104,14 +103,26 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
                         grasp_array_y.append(y_val) #store the y-axis coordinate which is lesser than the depth
 
                     if y_val == y_grasp: #change the colour of the pixels to highlight the ideal location for grasping the object
-                        image[y_val, x_val] = (0, 255, 0, 0)
-                    else:
-                        image[y_val, x_val] = (0, 0, 255, 0)
+                        #image[y_val, x_val] = (0, 255, 0, 0)
+                        grasp_array_x.append(x_val) # store the x-axis coordinate which is lesser than the depth
+                    '''else:
+                        image[y_val, x_val] = (0, 0, 255, 0)''' #highlighting the pixels whose depth is greater than
+                                                                # the median depth of the bounding box with a red colour
             except:
                 pass
     y_grasp = grasp_array_y[(len(grasp_array_y) - 1)]
-    grasp_y_delay.append(y_grasp) # appedning the value of y_grasp into the array to ensure it can be recalled in the next frame
-    #print(y_coord, grasp_y_delay[len(grasp_y_delay)-1], len(grasp_y_delay), height)
+    print(len(grasp_array_x))
+    if len(grasp_array_x) > 0:
+        x_pt1 = int(grasp_array_x[0]) # the 1st x-axis coordinates which happen to be lesser than the median depth of
+                                        # the object in the previous frame
+        x_pt2 = int(grasp_array_x[len(grasp_array_x) - 1])  # the 2nd x-axis coordinates which happen to be lesser than
+                                                                # the median depth of the object in the previous frame
+        height = height / 2  # height of the bounding box
+        y_grasp = int(y_grasp - height)  # the ideal point to grab the object in the y-axis
+        cv2.circle(image, (x_pt1, y_grasp), 20, (0, 255, 0, 0), -1) #forming a circle around the first point
+        cv2.circle(image, (x_pt2, y_grasp), 20, (0, 255, 0, 0), -1) #forming a circle around the second point
+
+    grasp_y_delay.append(y_grasp)    # appending the value of y_grasp into the array to ensure it can be recalled in the next frame
     grasp_method(median_large, min_object_depth)
     return image    #returning a modified image which has depth based segmentation mask
                     # marked on the image in the area of the bounding box

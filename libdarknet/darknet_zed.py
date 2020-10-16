@@ -542,7 +542,7 @@ def main(argv):
                     image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay)
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
 
                 else:  # j += 1
