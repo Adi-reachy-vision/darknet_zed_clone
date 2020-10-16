@@ -54,6 +54,7 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
      is filled with red colour.'''
     median_depth = [] #initialising an array to store the depth of all pixels in the bounding box
     grasp_array_y = []
+    min_object_depth = []
     height = 0
     for i in range(y_extent):  # element by element multiplication of the height of the bounding box
         y_val = y_coord + (i - 1)
@@ -98,6 +99,7 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
 
                 if calc_depth < median_large:  # comparing the pixel distance from the threshold
                     # print("True")
+                    min_object_depth.append(calc_depth)
                     if y_val not in grasp_array_y:
                         grasp_array_y.append(y_val) #store the y-axis coordinate which is lesser than the depth
 
@@ -110,6 +112,7 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
     y_grasp = grasp_array_y[(len(grasp_array_y) - 1)]
     grasp_y_delay.append(y_grasp) # appedning the value of y_grasp into the array to ensure it can be recalled in the next frame
     #print(y_coord, grasp_y_delay[len(grasp_y_delay)-1], len(grasp_y_delay), height)
+    grasp_method(median_large, min_object_depth)
     return image    #returning a modified image which has depth based segmentation mask
                     # marked on the image in the area of the bounding box
 
@@ -141,6 +144,15 @@ def median_average(median, median_max, median_array):
         return median                                   #if the average values aren't present return the median of the
                                                         # past frame which was being analysed
 
+def grasp_method(median_large, min_object_depth):
+    min_object = round(min(min_object_depth), 3)
+    final = median_large - min_object
+    if final < 0.7:
+        method = "Grasp"
+    else:
+        method = "Pinch"
+
+    #print(method)
 
 def image_segmentation_colour(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent, thresh):
     '''An alternate image segmentation method which provides a black and white segmentaiton mask based on the presence
