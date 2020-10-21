@@ -386,12 +386,12 @@ def main(argv):
         input_type.set_from_camera_id(zed_id)
 
     init = sl.InitParameters(input_t=input_type)
-    init.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
+    #init.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
     init.sdk_verbose = True
     init.coordinate_units = sl.UNIT.METER
     init.depth_minimum_distance = 0.20
     init.camera_resolution = sl.RESOLUTION.HD720
-    init.depth_mode = sl.DEPTH_MODE.QUALITY
+    init.depth_mode = sl.DEPTH_MODE.ULTRA
     init.camera_fps = 60
 
     cam = sl.Camera()
@@ -455,12 +455,15 @@ def main(argv):
     log.info("Running...")
     processes = []
     avg_median = []
+    median_max = []
     detected_objects = []
+    grasp_y_delay = []
+    shallow_cluster_y = []
     key = ''
     sensors_data = sl.SensorsData()
-    '''transform = sl.Transform()
+    transform = sl.Transform()
     tracking_params = sl.PositionalTrackingParameters(transform)  # initialises positional tracking
-    cam.enable_positional_tracking(tracking_params)  # enables positional tracking'''
+    cam.enable_positional_tracking(tracking_params)  # enables positional tracking
     count_o = 1
     while key != 113:  # for 'q' key
         point_cloud_data = ""
@@ -482,7 +485,7 @@ def main(argv):
             bench_time = time.time()  # setting checkpoint for the loop
             mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))
 
-            tracking_state = cam.get_position(camera_pose, sl.REFERENCE_FRAME.WORLD)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
+            tracking_state = cam.get_position(camera_pose, sl.REFERENCE_FRAME.LAST)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
             if tracking_state == sl.POSITIONAL_TRACKING_STATE.OK:  # activates only when the poisitional tracking state is in 'OK' state
                 tx, ty, tz = Bridge.get_positional_data(camera_pose,
                                                  py_translation)  # gets translation and rotation data as a string
@@ -514,7 +517,7 @@ def main(argv):
                 # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
                 cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                         x_coord + x_extent)]
-                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image)
+                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image, existing_labels=processes)
 
                 if label == "bicycle":  # a binding statement to direct colour recognition
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
@@ -535,12 +538,12 @@ def main(argv):
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
-                if label == "cup":  # if statement to filter the classes needed for segmentation
+                if label == "laptop":  # if statement to filter the classes needed for segmentation
                     # print(x, y, z, len(detected_objects))
-                    #image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, processes, avg_median)
+                    #image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y)
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0),
                                 2)  # pasting label on top of the segmentation mask
 
                 else:  # j += 1
@@ -562,7 +565,7 @@ def main(argv):
             output = time.time() - probs
             # log.info("Detection time: {}".format(bench_time - start_time))
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            # log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
+            #log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
