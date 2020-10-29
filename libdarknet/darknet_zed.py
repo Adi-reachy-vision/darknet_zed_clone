@@ -386,7 +386,7 @@ def main(argv):
         input_type.set_from_camera_id(zed_id)
 
     init = sl.InitParameters(input_t=input_type)
-    init.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
+    #init.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
     init.sdk_verbose = True
     init.coordinate_units = sl.UNIT.METER
     init.depth_minimum_distance = 0.20
@@ -458,11 +458,15 @@ def main(argv):
     median_max = []
     detected_objects = []
     grasp_y_delay = []
+    shallow_cluster_y = []
+    positional_buffer_array = []
+    rotational_buffer_array = []
     key = ''
-    sensors_data = sl.SensorsData()
-    '''transform = sl.Transform()
+    sensor_data = sl.SensorsData()
+    imu_data = sl.IMUData()
+    transform = sl.Transform()
     tracking_params = sl.PositionalTrackingParameters(transform)  # initialises positional tracking
-    cam.enable_positional_tracking(tracking_params)  # enables positional tracking'''
+    cam.enable_positional_tracking(tracking_params)  # enables positional tracking
     count_o = 1
     while key != 113:  # for 'q' key
         point_cloud_data = ""
@@ -471,6 +475,7 @@ def main(argv):
 
         camera_pose = sl.Pose()
         if err == sl.ERROR_CODE.SUCCESS:
+            cam.get_sensors_data(sensor_data, sl.TIME_REFERENCE.IMAGE)
             cam.retrieve_image(mat, sl.VIEW.LEFT)
             image = mat.get_data()
             py_translation = sl.Translation()
@@ -480,14 +485,18 @@ def main(argv):
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
             #Bridge.opfileprint(str(detections))
+            '''imu_data=sensor_data.get_imu_data()
+            imu = sl.IMUData.get_linear_acceleration(imu_data)
+            print("imu : ", imu)'''
 
             bench_time = time.time()  # setting checkpoint for the loop
             mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))
 
-            tracking_state = cam.get_position(camera_pose, sl.REFERENCE_FRAME.WORLD)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
-            if tracking_state == sl.POSITIONAL_TRACKING_STATE.OK:  # activates only when the poisitional tracking state is in 'OK' state
+            tracking_state = cam.get_position(camera_pose, sl.REFERENCE_FRAME.LAST)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
+            #print(tracking_state)
+            '''if tracking_state == sl.POSITIONAL_TRACKING_STATE.OK:  # activates only when the poisitional tracking state is in 'OK' state
                 tx, ty, tz = Bridge.get_positional_data(camera_pose,
-                                                 py_translation)  # gets translation and rotation data as a string
+                                                 py_translation)  # gets translation and rotation data as a string'''
 
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
             for detection in detections:
@@ -516,7 +525,7 @@ def main(argv):
                 # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
                 cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                         x_coord + x_extent)]
-                #detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image)
+                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image, processes, positional_buffer_array, rotational_buffer_array)
 
                 if label == "bicycle":  # a binding statement to direct colour recognition
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
@@ -537,12 +546,12 @@ def main(argv):
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
-                if label == "cup":  # if statement to filter the classes needed for segmentation
+                if label == "laptop":  # if statement to filter the classes needed for segmentation
                     # print(x, y, z, len(detected_objects))
-                    image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay)
+                    #image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y)
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0),
                                 2)  # pasting label on top of the segmentation mask
 
                 else:  # j += 1
@@ -558,13 +567,15 @@ def main(argv):
             cv2.imshow("ZED", image)
             # cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
-            #print(detected_objects)
+            print(detected_objects)
+            Bridge.opfileprint(str(detected_objects))
+            Bridge.socket_server_detected_objects(str(detected_objects))
             Bridge.socket_server_status(str(detections), point_cloud_data)
             # detected_objects.clear()
             output = time.time() - probs
             # log.info("Detection time: {}".format(bench_time - start_time))
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            # log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
+            #log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
