@@ -34,8 +34,9 @@ def socket_server_status(detections, point_cloud_data):
     finally:
         sock.close()  # once the data has been sent, the socket can be closed
 
+
 def socket_server_detected_objects(detections):
-    '''The Detection data is transmitted via a socket connection to OverLord.py via TCP or UDP protocol,
+    '''The detected objects list is transmitted via a socket connection to OverLord.py via TCP or UDP protocol,
     to be viewed by the primary user of the program. The import function was compromised between darknet_zed & Overlord,
     meaning the text - input command from Overlord was initiated every time darknet_zed ran and the sequential structure
     execution in python meant that the detection algorithm would only start once the input was given to print detected function.
@@ -205,6 +206,10 @@ def median_average(median, median_max, median_array):
 
 
 def grasp_method(median_large, min_object_depth):
+    '''The grasping method which relies on object geometry gives us information in the width of the object between the extremities
+    of the grasping points. If they are greater than the width of the curved hand, then it will be uncomfortable for
+    grasping the object in the present pose and thus, will have to be changed, to be more accessible by the hand for
+    a better grip.'''
     min_object = round(min(min_object_depth), 3)
     final = median_large - min_object
     if final < 0.7:
@@ -358,43 +363,48 @@ def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer
      This allows, the values to be updated only once, rather than a repeated update.'''
     x_sum = y_sum = z_sum = 0.0
     rx_sum = ry_sum = rz_sum = 0.0
-    if tx != 0.0 or ty != 0.0 or tz != 0.0: #A trigger to start storing values for translation to be processed later
+    if tx != 0.0 or ty != 0.0 or tz != 0.0:  # A trigger to start storing values for translation to be processed later
         pos = [tx, ty, tz]
-        if pos not in positional_buffer_array:  #storing unique values in an array
+        if pos not in positional_buffer_array:  # storing unique values in an array
             positional_buffer_array.append(pos)
 
-    if rx != 0.0 or ry != 0.0 or rz != 0.0: #A trigger to start storing values for rotation to be processed later
+    if rx != 0.0 or ry != 0.0 or rz != 0.0:  # A trigger to start storing values for rotation to be processed later
         rot = [rx, ry, rz]
-        if rot not in rotational_buffer_array: #storing unique values in an array
+        if rot not in rotational_buffer_array:  # storing unique values in an array
             rotational_buffer_array.append(rot)
 
-    if len(positional_buffer_array) > 0: #if the translational array is not None
+    if len(positional_buffer_array) > 0:  # if the translational array is not None
         # print("Trans True")
-        if abs(tx) == 0.0 and abs(ty) == 0.0 and abs(tz) == 0.0: #if the values have stablised to reach a zero value
+        if abs(tx) == 0.0 and abs(ty) == 0.0 and abs(tz) == 0.0:  # if the values have stablised to reach a zero value
             # print("Condition zero trans")
             # print("greater : ", positional_buffer_array)
-            for x, y, z in positional_buffer_array: #take the individual x,y,z values and in the list and add them
+            for x, y, z in positional_buffer_array:  # take the individual x,y,z values and in the list and add them
                 x_sum += x
                 y_sum += y
                 z_sum += z
             positional_buffer_array.clear()
             print("mod : ", x_sum, y_sum, z_sum, "len : ", len(positional_buffer_array))
 
-    if len(rotational_buffer_array) > 0: #if the rotational array is not None
-        #print("Rot True")
-        if abs(rx) == 0.0 and abs(ry) == 0.0 and abs(rz) == 0.0: #if the values have stablised to reach a zero value
+    if len(rotational_buffer_array) > 0:  # if the rotational array is not None
+        # print("Rot True")
+        if abs(rx) == 0.0 and abs(ry) == 0.0 and abs(rz) == 0.0:  # if the values have stablised to reach a zero value
             print("Condition zero rot")
             # print("greater : ", rotational_buffer_array)
-            for x, y, z in rotational_buffer_array: #take the individual x,y,z values and in the list and add them
+            for x, y, z in rotational_buffer_array:  # take the individual x,y,z values and in the list and add them
                 rx_sum += x
                 ry_sum += y
                 rz_sum += z
             rotational_buffer_array.clear()
             print("rot mod : ", rx_sum, ry_sum, rz_sum, "len : ", len(rotational_buffer_array))
+            if 2.0 > ry_sum >= 1.4 or -1.4 > ry_sum > - 2.0:
+                positional_buffer_array.clear()
 
-    tx, ty, tz = x_sum, y_sum, z_sum  #the x,y,z values from the translation array are transmitted only once, otherwise it is 0
-    rx, ry, rz = rx_sum, ry_sum, rz_sum #the x,y,z values from the rotation array are transmitted only once, otherwise it is 0
-    return tx, ty, tz, rx, ry, rz  #returning translation and rotation array
+    if abs(x_sum) < 0.08 and y_sum < 0.08 and z_sum < 0.08:
+        tx, ty, tz = 0, 0, 0  # the x,y,z values from the translation array are transmitted only once, otherwise it is 0
+
+    tx, ty, tz = x_sum, y_sum, z_sum  # the x,y,z values from the translation array are transmitted only once, otherwise it is 0
+    rx, ry, rz = rx_sum, ry_sum, rz_sum  # the x,y,z values from the rotation array are transmitted only once, otherwise it is 0
+    return tx, ty, tz, rx, ry, rz  # returning translation and rotation array
 
 
 def positional_update(detected_objects, tx, ty, tz):
@@ -417,6 +427,7 @@ def positional_update(detected_objects, tx, ty, tz):
         i += 1
     detected_objects.clear()
     return detected_objects_change
+
 
 def positional_update_left(detected_objects, tx, ty, tz):
     '''If the camera has been rotated to the left, it's positional tracking method now has to be changed from it's
@@ -456,7 +467,7 @@ def positional_update_right(detected_objects, tx, ty, tz):
         yvalue = round(detectedx[3], 3)
         zvalue = round(detectedx[4], 3)
         detected_o = [id_new, label_new, (xvalue + tx), (yvalue - ty),
-                      (zvalue + tz), "change", "rotated left"]
+                      (zvalue + tz), "change", "rotated right"]
         detected_objects_rot.append(
             detected_o)  # the updated entry of detected object with new positional information
         i += 1
@@ -472,35 +483,65 @@ def rotational_update(detected_objects, rx, ry, rz):
     detected_objects_rot = []
     i = 0
     length = len(detected_objects)
-    if -1.4 > ry > - 2.0: # generally a y- axis value of -1.5 means it has turned to the left on a steady plane (y - axis elevation hasn't changed)
+    if -1.4 > ry > - 2.0:  # generally a y- axis value of -1.5 means it has turned to the left on a steady plane (y - axis elevation hasn't changed)
         rotation = True
         detected_objects_rot.clear()
-        for detectedx in detected_objects:   #iterating through the detected objects list contents
-            #print(detected_objects, i)
+        for detectedx in detected_objects:  # iterating through the detected objects list contents
+            # print(detected_objects, i)
             id_new = detectedx[0]  # storing the id of the list object that is about to be changed
             label_new = detectedx[1]  # storing the list of the list object that is about to be changed
             xvalue = round(detectedx[2], 3)  # storing the x - axis of the list object that is about to be changed
             yvalue = round(detectedx[3], 3)  # storing the y-axis of the list object that is about to be changed
             zvalue = round(detectedx[4], 3)  # storing the z-axis of the list object that is about to be changed
-            detected_o = [id_new, label_new, - (zvalue), (yvalue),
-                          -(xvalue), "change", "rotated left"]
+            if detectedx[6] == "no rotation":
+                detected_o = [id_new, label_new, -(zvalue), (yvalue),
+                              (xvalue), "change", "rotated left"]
+            elif detectedx[6] == "rotated right":
+                detected_o = [id_new, label_new, - (zvalue), (yvalue),
+                              (xvalue), "change", "no rotation"]
+            elif detectedx[6] == "rotated left":
+                detected_o = [id_new, label_new, -(zvalue), (yvalue),
+                              (xvalue), "change", "rotated left"]
             detected_objects_rot.append(
                 detected_o)  # the updated entry of detected object with new positional information
             i += 1
-        #detected_objects.clear()
+        # detected_objects.clear()
 
-    elif 2.0 > ry > 1.4: # generally a y- axis value of 1.5 means it has turned to the right on a steady plane (y - axis elevation hasn't changed)
+    elif 2.0 > ry > 1.2:  # generally a y- axis value of 1.5 means it has turned to the right on a steady plane (y - axis elevation hasn't changed)
         rotation = True
         detected_objects_rot.clear()
         for detectedx in detected_objects:
             # print(detectedx, i)
-            id_new = detectedx[0]   #storing the id of the list object that is about to be changed
-            label_new = detectedx[1]    #storing the list of the list object that is about to be changed
-            xvalue = round(detectedx[2], 3) #storing the x - axis of the list object that is about to be changed
-            yvalue = round(detectedx[3], 3) #storing the y-axis of the list object that is about to be changed
-            zvalue = round(detectedx[4], 3) #storing the z-axis of the list object that is about to be changed
-            detected_o = [id_new, label_new, -(zvalue), (yvalue),
-                          (xvalue), "change", "rotated right"]
+            id_new = detectedx[0]  # storing the id of the list object that is about to be changed
+            label_new = detectedx[1]  # storing the list of the list object that is about to be changed
+            xvalue = round(detectedx[2], 3)  # storing the x - axis of the list object that is about to be changed
+            yvalue = round(detectedx[3], 3)  # storing the y-axis of the list object that is about to be changed
+            zvalue = round(detectedx[4], 3)  # storing the z-axis of the list object that is about to be changed
+            if detectedx[6] == "rotated left":
+                detected_o = [id_new, label_new, (zvalue), (yvalue),
+                              -(xvalue), "change", "no rotation"]
+            elif detectedx[6] == "no rotation":
+                detected_o = [id_new, label_new, (zvalue), (yvalue),
+                              -(xvalue), "change", "rotated right"]
+            elif detectedx[6] == "rotated right":
+                detected_o = [id_new, label_new, (zvalue), (yvalue),
+                              -(xvalue), "change", "inverted"]
+            detected_objects_rot.append(
+                detected_o)  # the updated entry of detected object with new positional information
+            i += 1
+        detected_objects.clear()
+
+    elif 4.0 > ry > 2.4 or -2.4 > ry > - 4.0: # generally a y- axis value of 3.0 in either direction means it has turned by a full circle on a steady plane (y - axis elevation hasn't changed)
+        rotation = True
+        detected_objects_rot.clear()
+        for detectedx in detected_objects:
+            # print(detectedx, i)
+            id_new = detectedx[0]  # storing the id of the list object that is about to be changed
+            label_new = detectedx[1]  # storing the list of the list object that is about to be changed
+            xvalue = round(detectedx[2], 3)  # storing the x - axis of the list object that is about to be changed
+            yvalue = round(detectedx[3], 3)  # storing the y-axis of the list object that is about to be changed
+            zvalue = round(detectedx[4], 3)  # storing the z-axis of the list object that is about to be changed
+            detected_o = [id_new, label_new, -(xvalue), (yvalue), -(zvalue), "change", "inverted"]
             detected_objects_rot.append(
                 detected_o)  # the updated entry of detected object with new positional information
             i += 1
@@ -530,7 +571,6 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
     y = round(y, 3)
     z = round(z, 3)
     # print(tx, ty, tz)
-
     if rx != 0.0 or ry != 0.0 or rz != 0.0:
         rotation, detected_objects = rotational_update(detected_objects, rx, ry, rz)
         '''if rotation == False:
@@ -545,8 +585,6 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
             detected_objects = positional_update_left(detected_objects, tx, ty, tz)
         elif "rotated right" in detected_rot:
             detected_objects = positional_update_right(detected_objects, tx, ty, tz)
-
-
 
     if len(detected_objects) >= 0:  # if length of detected objects is greater than or equal to 0
         for detected in detected_objects:  # scrolling through all the entries of the detected objects list
@@ -585,10 +623,9 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
         # print(existing_labels)
         id = random.randint(1, 1000000000)
         detected_o = [id, label, round(tx + x, 3), round(ty + y, 3),
-                      round(tz + z, 3), "orig"]
+                      round(tz + z, 3), "orig", "no rotation"]
         detected_objects.append(detected_o)
-        cv2.imwrite("memory_images/{}.jpg".format(id),
-                    cropped_image)  # the cropped image (bounding box) of the detected object is written into a file
+        # cv2.imwrite("memory_images/{}.jpg".format(id), cropped_image)  # the cropped image (bounding box) of the detected object is written into a file
     '''else:
         # if the class already exists, then this method verifies if the object has been
         # detected for the first time and if it has, it is appended into detected_objects.
