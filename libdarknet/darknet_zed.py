@@ -22,7 +22,7 @@ import statistics
 import getopt
 from ctypes import *
 import numpy as np
-import cv2
+import cv2 as cv2
 import pyzed.sl as sl
 import Bridge
 
@@ -461,6 +461,7 @@ def main(argv):
     shallow_cluster_y = []
     positional_buffer_array = []
     rotational_buffer_array = []
+    rotation_timer = False
     key = ''
     sensor_data = sl.SensorsData()
     imu_data = sl.IMUData()
@@ -525,30 +526,25 @@ def main(argv):
                 # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
                 cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                         x_coord + x_extent)]
-                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image, processes, positional_buffer_array, rotational_buffer_array)
+                #detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image, processes, positional_buffer_array, rotational_buffer_array, rotation_timer)
 
                 if label == "bicycle":  # a binding statement to direct colour recognition
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                             x_coord + x_extent)]  # cropping image to the size of the object bounding box
                     # mask[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] = color_test(cropped_image)  # getting the color output from the color recognition function
-                    color_string = Bridge.get_color(cropped_image)  # getting colour output from the function as a string
-                    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
+                    #color_string = Bridge.get_color(cropped_image)  # getting colour output from the function as a string
 
-                    try:
-                        color = image[bounds[0], bounds[1]]
-                    except:
-                        color = 0
 
                     thresh_color = 10
-                    #mask = Bridge.image_segmentation_colour(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent,thresh_color)  # segmentation based on colour with adaptive threshold range
+                    #mask = Bridge.image_segmentation_colour(image, mask, y_coord, y_extent, x_coord, x_extent,thresh_color, bounds)  # segmentation based on colour with adaptive threshold range
 
                     cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
-                if label == "laptop":  # if statement to filter the classes needed for segmentation
+                if label == "cup":  # if statement to filter the classes needed for segmentation
                     # print(x, y, z, len(detected_objects))
-                    #image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y)
+                    image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y)
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0),
@@ -567,8 +563,8 @@ def main(argv):
             cv2.imshow("ZED", image)
             # cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
-            print(detected_objects)
-            Bridge.opfileprint(str(detected_objects))
+            #print(detected_objects)
+            #Bridge.opfileprint(str(detected_objects))
             Bridge.socket_server_detected_objects(str(detected_objects))
             Bridge.socket_server_status(str(detections), point_cloud_data)
             # detected_objects.clear()

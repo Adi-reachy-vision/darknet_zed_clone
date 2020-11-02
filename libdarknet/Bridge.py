@@ -2,7 +2,10 @@ import io
 import math
 import random
 import socket
-from skimage.measure import compare_ssim
+import statistics
+import time
+
+#from skimage.measure import compare_ssim
 import numpy as np
 import cv2
 from PIL import Image, ImageChops
@@ -13,20 +16,23 @@ def socket_server_status(detections, point_cloud_data):
     to be viewed by the primary user of the program. The import function was compromised between darknet_zed & Overlord,
     meaning the text - input command from Overlord was initiated every time darknet_zed ran and the sequential structure
     execution in python meant that the detection algorithm would only start once the input was given to print detected function.
-    The socket method kept both code independent from ech other, allowing us to detect the objects and at the same time
+    The socket method kept both code independent from each other, allowing us to detect the objects and at the same time
     see it in a seperate window. Parallel Processing libraries such as threading and multiprocessing were tried but this
     method gave a suitable outcome.
 
-    UDP was chosen over TCP due to it's independence from the necessity of a listning client, thus irrespective of
-    whther or not, there was a listening client the server keeps on transmitting data and the client only prints out
-     the real-time data once the user needs it otherwise, the data can get overwritten'''
+    UDP was chosen over TCP due to it's independence from the necessity of a listening client, thus irrespective of
+    whether or not, there was a listening client the server keeps on transmitting data and the client only prints out
+     the real-time data once the user needs it otherwise, the data can get overwritten.'''
 
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET,
                          socket.SOCK_DGRAM)  # SOCK_DGRAM stands for datagram which is UDP's method of data transmission
     server_address = ('localhost',
-                      10000)  # the local host address and port number. If you run into an error try changing, as the port might be occupied by some other process
-    message = detections + "//" + point_cloud_data  # the detected data separated by a separator '//' from the point cloud location data of x, y, z value of the bounding box for location estimation of the object in the environment
+                      10000)  # the local host address and port number. If you run into an error try changing,
+                                # as the port might be occupied by some other process
+    message = detections + "//" + point_cloud_data  # the detected data separated by a separator '//' from the point
+                                                    # cloud location data of x, y, z value of the bounding box for
+                                                    #location estimation of the object in the environment
 
     try:
         # Send data in a try block to prevent the presence of an error
@@ -68,7 +74,7 @@ def opfileprint(detection):
     is kept as an alternate if needed. The Recieveing end needs to just read the file and print out the data. The recieving end
     is present in Overlord.py'''
 
-    Fileman = open('detected_objects', 'w')  # creating and opening file in the write configuration
+    Fileman = open('YOLO_OUTPUT', 'w')  # creating and opening file in the write configuration
     for i in detection:
         Fileman.write(i)  # writing the detection into the file
         # Fileman.write('\n')
@@ -81,7 +87,14 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
     The depth of the pixels in the bounding box are added to a flattened array and after averaging their depth,
     the mean depth of the object is received and the depth of the pixels is once again compared to analyse if the
      target pixel is greater or lesser than the mean depth of the object. If it is lesser than the mean depth, the pixel
-     is filled with red colour.'''
+     is filled with red colour.
+
+     Grasping points - an additional method which may be used in conjuncture to the image segmentation mask is to identify,
+     the ideal grasping points of the object with respect to the object geometry. The present primary method to acheive,
+     grasping points on the object is done by storing all the y-axis pixels which are lesser than the median depth and
+     then finding the median values from the pixel to locate the center of the object in terms of y-axis values. Once,
+     the central y-axis coordinates have been narrowed down, it's respective x-axis values are at the edge of the
+     segmentation mask are highlighted using a green circle marker.'''
     median_depth = []  # initialising an array to store the depth of all pixels in the bounding box
     grasp_array_y = []
     grasp_array_x = []
@@ -143,8 +156,8 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
                         grasp_array_x.append(x_val)  # store the x-axis coordinate which is lesser than the depth
                     if y_val == y_shallow:
                         shallow_grasp_x.append(x_val)
-                    '''else:
-                        image[y_val, x_val] = (0, 0, 255, 0)'''  # highlighting the pixels whose depth is greater than
+                    else:
+                        image[y_val, x_val] = (0, 0, 255, 0)  # highlighting the pixels whose depth is greater than
                     # the median depth of the bounding box with a red colour
             except:
                 pass
@@ -155,7 +168,8 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
         # the object in the previous frame
         x_pt2 = int(grasp_array_x[len(grasp_array_x) - 1])  # the 2nd x-axis coordinates which happen to be lesser than
         # the median depth of the object in the previous frame
-        height = height / 2  # height of the bounding box
+        height = statistics.median(height)
+        #height = height / 2  # height of the bounding box
         y_grasp = int(y_grasp - height)  # the ideal point to grab the object in the y-axis
         cv2.circle(image, (x_pt1, y_grasp), 20, (0, 255, 0, 0), -1)  # forming a circle around the first point
         cv2.circle(image, (x_pt2, y_grasp), 20, (0, 255, 0, 0), -1)  # forming a circle around the second point
@@ -217,10 +231,10 @@ def grasp_method(median_large, min_object_depth):
     else:
         method = "Pinch"
 
-    print(method)
+    #print(method)
 
 
-def image_segmentation_colour(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent, thresh):
+def image_segmentation_colour(image, mask, y_coord, y_extent, x_coord, x_extent, thresh, bounds):
     '''An alternate image segmentation method which provides a black and white segmentaiton mask based on the presence
     of colour pixels in the designated bounding box area.The center pixel as designated by yolo is marked as the pixel
     of interest whose colour value is taken as the colour of interest and after adding a threshold as padding to keep it within
@@ -228,7 +242,11 @@ def image_segmentation_colour(cropped_image, color, mask, y_coord, y_extent, x_c
 
     Depth based segmentation is the primary method but colour based segmentation is also useful in some situations,
     personally it works phenomenally well, in darker colour regions.'''
-
+    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] #cropping the image to the size of the bounding box to reduce confusion by the inRange function in detecting the dominant colour
+    try:
+        color = image[bounds[0], bounds[1]] #finding the colour value of the center pixel
+    except:
+        color = 0 #in case we can't find return a 0 value
     cropped_image = cv2.cvtColor(cropped_image,
                                  cv2.COLOR_BGRA2BGR)  # cropping the image to the size of the bounding box
     blue = color[0]  # storing blue value in bgr
@@ -355,7 +373,7 @@ def get_positional_data(camera_pose, py_translation):
     return tx, ty, tz, rx, ry, rz
 
 
-def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer_array, rotational_buffer_array):
+def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer_array, rotational_buffer_array, rotation_timer):
     tx, ty, tz, rx, ry, rz = get_positional_data(camera_pose, py_translation)
     '''The translational and rotational data given by the camera may have some errors due to the speed of the movement 
     or via other means (repeated values before the camera frame values normalise to 0,0,0). 
@@ -363,6 +381,7 @@ def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer
      This allows, the values to be updated only once, rather than a repeated update.'''
     x_sum = y_sum = z_sum = 0.0
     rx_sum = ry_sum = rz_sum = 0.0
+    time_start = None
     if tx != 0.0 or ty != 0.0 or tz != 0.0:  # A trigger to start storing values for translation to be processed later
         pos = [tx, ty, tz]
         if pos not in positional_buffer_array:  # storing unique values in an array
@@ -374,7 +393,7 @@ def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer
             rotational_buffer_array.append(rot)
 
     if len(positional_buffer_array) > 0:  # if the translational array is not None
-        # print("Trans True")
+        print("Trans True")
         if abs(tx) == 0.0 and abs(ty) == 0.0 and abs(tz) == 0.0:  # if the values have stablised to reach a zero value
             # print("Condition zero trans")
             # print("greater : ", positional_buffer_array)
@@ -383,10 +402,10 @@ def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer
                 y_sum += y
                 z_sum += z
             positional_buffer_array.clear()
-            print("mod : ", x_sum, y_sum, z_sum, "len : ", len(positional_buffer_array))
+            print("mod : ", x_sum, y_sum, z_sum)
 
     if len(rotational_buffer_array) > 0:  # if the rotational array is not None
-        # print("Rot True")
+        print("Rot True")
         if abs(rx) == 0.0 and abs(ry) == 0.0 and abs(rz) == 0.0:  # if the values have stablised to reach a zero value
             print("Condition zero rot")
             # print("greater : ", rotational_buffer_array)
@@ -395,16 +414,90 @@ def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer
                 ry_sum += y
                 rz_sum += z
             rotational_buffer_array.clear()
-            print("rot mod : ", rx_sum, ry_sum, rz_sum, "len : ", len(rotational_buffer_array))
+            print("rot mod : ", rx_sum, ry_sum, rz_sum)
             if 2.0 > ry_sum >= 1.4 or -1.4 > ry_sum > - 2.0:
                 positional_buffer_array.clear()
-
-    if abs(x_sum) < 0.08 and y_sum < 0.08 and z_sum < 0.08:
-        tx, ty, tz = 0, 0, 0  # the x,y,z values from the translation array are transmitted only once, otherwise it is 0
 
     tx, ty, tz = x_sum, y_sum, z_sum  # the x,y,z values from the translation array are transmitted only once, otherwise it is 0
     rx, ry, rz = rx_sum, ry_sum, rz_sum  # the x,y,z values from the rotation array are transmitted only once, otherwise it is 0
     return tx, ty, tz, rx, ry, rz  # returning translation and rotation array
+
+def rotational_update(detected_objects, rx, ry, rz):
+    '''When the camera rotates, its coordinate system changes and this update needs to be reflected in the memory component
+    of the deteccted objects as well. The new coordinate system has a new x,y,z value where the previous coordinate system's
+    values now have to be updated with the new coordinate system's values.'''
+    rotation = False
+    detected_objects_rot = []
+    i = 0
+    length = len(detected_objects)
+    if -1.4 > ry > - 2.0:  # generally a y- axis value of -1.5 means it has turned to the left on a steady plane (y - axis elevation hasn't changed)
+        rotation = True
+        detected_objects_rot.clear()
+        for detectedx in detected_objects:  # iterating through the detected objects list contents
+            # print(detected_objects, i)
+            id_new = detectedx[0]  # storing the id of the list object that is about to be changed
+            label_new = detectedx[1]  # storing the list of the list object that is about to be changed
+            xvalue = round(detectedx[2], 3)  # storing the x - axis of the list object that is about to be changed
+            yvalue = round(detectedx[3], 3)  # storing the y-axis of the list object that is about to be changed
+            zvalue = round(detectedx[4], 3)  # storing the z-axis of the list object that is about to be changed
+            if detectedx[6] == "no rotation":
+                detected_o = [id_new, label_new, -(zvalue), (yvalue),
+                              (xvalue), "change", "rotated left"]
+            elif detectedx[6] == "rotated right":
+                detected_o = [id_new, label_new, - (zvalue), (yvalue),
+                              (xvalue), "change", "no rotation"]
+            elif detectedx[6] == "rotated left":
+                detected_o = [id_new, label_new, -(zvalue), (yvalue),
+                              (xvalue), "change", "rotated left"]
+            detected_objects_rot.append(
+                detected_o)  # the updated entry of detected object with new positional information
+            i += 1
+        # detected_objects.clear()
+
+    elif 2.0 > ry > 1.2:  # generally a y- axis value of 1.5 means it has turned to the right on a steady plane (y - axis elevation hasn't changed)
+        rotation = True
+        detected_objects_rot.clear()
+        for detectedx in detected_objects:
+            # print(detectedx, i)
+            id_new = detectedx[0]  # storing the id of the list object that is about to be changed
+            label_new = detectedx[1]  # storing the list of the list object that is about to be changed
+            xvalue = round(detectedx[2], 3)  # storing the x - axis of the list object that is about to be changed
+            yvalue = round(detectedx[3], 3)  # storing the y-axis of the list object that is about to be changed
+            zvalue = round(detectedx[4], 3)  # storing the z-axis of the list object that is about to be changed
+            if detectedx[6] == "rotated left":
+                detected_o = [id_new, label_new, (zvalue), (yvalue),
+                              -(xvalue), "change", "no rotation"]
+            elif detectedx[6] == "no rotation":
+                detected_o = [id_new, label_new, (zvalue), (yvalue),
+                              -(xvalue), "change", "rotated right"]
+            elif detectedx[6] == "rotated right":
+                detected_o = [id_new, label_new, (zvalue), (yvalue),
+                              -(xvalue), "change", "inverted"]
+            detected_objects_rot.append(
+                detected_o)  # the updated entry of detected object with new positional information
+            i += 1
+        detected_objects.clear()
+
+    elif 4.0 > ry > 2.1 or -2.4 > ry > - 4.0: # generally a y- axis value of 3.0 in either direction means it has turned by a full circle on a steady plane (y - axis elevation hasn't changed)
+        rotation = True
+        detected_objects_rot.clear()
+        for detectedx in detected_objects:
+            # print(detectedx, i)
+            id_new = detectedx[0]  # storing the id of the list object that is about to be changed
+            label_new = detectedx[1]  # storing the list of the list object that is about to be changed
+            xvalue = round(detectedx[2], 3)  # storing the x - axis of the list object that is about to be changed
+            yvalue = round(detectedx[3], 3)  # storing the y-axis of the list object that is about to be changed
+            zvalue = round(detectedx[4], 3)  # storing the z-axis of the list object that is about to be changed
+            detected_o = [id_new, label_new, -(xvalue), (yvalue), -(zvalue), "change", "inverted"]
+            detected_objects_rot.append(
+                detected_o)  # the updated entry of detected object with new positional information
+            i += 1
+        detected_objects.clear()
+
+    if rotation == False:
+        return rotation, detected_objects
+    elif rotation == True:
+        return rotation, detected_objects_rot
 
 
 def positional_update(detected_objects, tx, ty, tz):
@@ -475,86 +568,31 @@ def positional_update_right(detected_objects, tx, ty, tz):
     return detected_objects_rot
 
 
-def rotational_update(detected_objects, rx, ry, rz):
-    '''When the camera rotates, its coordinate system changes and this update needs to be reflected in the memory component
-    of the deteccted objects as well. The new coordinate system has a new x,y,z value where the previous coordinate system's
-    values now have to be updated with the new coordinate system's values.'''
-    rotation = False
-    detected_objects_rot = []
-    i = 0
+def positional_update_inverted(detected_objects, tx, ty, tz):
+    '''If the camera has been rotated by 180 degrees, it's positional tracking method now has to be changed from it's
+            previously used updating method.'''
     length = len(detected_objects)
-    if -1.4 > ry > - 2.0:  # generally a y- axis value of -1.5 means it has turned to the left on a steady plane (y - axis elevation hasn't changed)
-        rotation = True
-        detected_objects_rot.clear()
-        for detectedx in detected_objects:  # iterating through the detected objects list contents
-            # print(detected_objects, i)
-            id_new = detectedx[0]  # storing the id of the list object that is about to be changed
-            label_new = detectedx[1]  # storing the list of the list object that is about to be changed
-            xvalue = round(detectedx[2], 3)  # storing the x - axis of the list object that is about to be changed
-            yvalue = round(detectedx[3], 3)  # storing the y-axis of the list object that is about to be changed
-            zvalue = round(detectedx[4], 3)  # storing the z-axis of the list object that is about to be changed
-            if detectedx[6] == "no rotation":
-                detected_o = [id_new, label_new, -(zvalue), (yvalue),
-                              (xvalue), "change", "rotated left"]
-            elif detectedx[6] == "rotated right":
-                detected_o = [id_new, label_new, - (zvalue), (yvalue),
-                              (xvalue), "change", "no rotation"]
-            elif detectedx[6] == "rotated left":
-                detected_o = [id_new, label_new, -(zvalue), (yvalue),
-                              (xvalue), "change", "rotated left"]
-            detected_objects_rot.append(
-                detected_o)  # the updated entry of detected object with new positional information
-            i += 1
-        # detected_objects.clear()
-
-    elif 2.0 > ry > 1.2:  # generally a y- axis value of 1.5 means it has turned to the right on a steady plane (y - axis elevation hasn't changed)
-        rotation = True
-        detected_objects_rot.clear()
-        for detectedx in detected_objects:
-            # print(detectedx, i)
-            id_new = detectedx[0]  # storing the id of the list object that is about to be changed
-            label_new = detectedx[1]  # storing the list of the list object that is about to be changed
-            xvalue = round(detectedx[2], 3)  # storing the x - axis of the list object that is about to be changed
-            yvalue = round(detectedx[3], 3)  # storing the y-axis of the list object that is about to be changed
-            zvalue = round(detectedx[4], 3)  # storing the z-axis of the list object that is about to be changed
-            if detectedx[6] == "rotated left":
-                detected_o = [id_new, label_new, (zvalue), (yvalue),
-                              -(xvalue), "change", "no rotation"]
-            elif detectedx[6] == "no rotation":
-                detected_o = [id_new, label_new, (zvalue), (yvalue),
-                              -(xvalue), "change", "rotated right"]
-            elif detectedx[6] == "rotated right":
-                detected_o = [id_new, label_new, (zvalue), (yvalue),
-                              -(xvalue), "change", "inverted"]
-            detected_objects_rot.append(
-                detected_o)  # the updated entry of detected object with new positional information
-            i += 1
-        detected_objects.clear()
-
-    elif 4.0 > ry > 2.4 or -2.4 > ry > - 4.0: # generally a y- axis value of 3.0 in either direction means it has turned by a full circle on a steady plane (y - axis elevation hasn't changed)
-        rotation = True
-        detected_objects_rot.clear()
-        for detectedx in detected_objects:
-            # print(detectedx, i)
-            id_new = detectedx[0]  # storing the id of the list object that is about to be changed
-            label_new = detectedx[1]  # storing the list of the list object that is about to be changed
-            xvalue = round(detectedx[2], 3)  # storing the x - axis of the list object that is about to be changed
-            yvalue = round(detectedx[3], 3)  # storing the y-axis of the list object that is about to be changed
-            zvalue = round(detectedx[4], 3)  # storing the z-axis of the list object that is about to be changed
-            detected_o = [id_new, label_new, -(xvalue), (yvalue), -(zvalue), "change", "inverted"]
-            detected_objects_rot.append(
-                detected_o)  # the updated entry of detected object with new positional information
-            i += 1
-        detected_objects.clear()
-
-    if rotation == False:
-        return rotation, detected_objects
-    elif rotation == True:
-        return rotation, detected_objects_rot
+    i = 0
+    detected_objects_change = []
+    while i < length:
+        detectedx = detected_objects[i - 1]
+        # print(detectedx, i)
+        id_new = detectedx[0]
+        label_new = detectedx[1]
+        xvalue = round(detectedx[2], 3)
+        yvalue = round(detectedx[3], 3)
+        zvalue = round(detectedx[4], 3)
+        detected_o = [id_new, label_new, (xvalue - tx), (yvalue - ty),
+                      (zvalue - tz), "change", "inverted"]
+        detected_objects_change.append(
+            detected_o)  # the updated entry of detected object with new positional information
+        i += 1
+    detected_objects.clear()
+    return detected_objects_change
 
 
 def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_translation, cropped_image, existing_labels,
-                         positional_buffer_array, rotational_buffer_array):
+                         positional_buffer_array, rotational_buffer_array, rotation_timer):
     ''' Detected Objects are stored in an array, with verification for uniqueness of the detection being performed by
     location data (it being atleast half a meter in any direction -x, y, z) and image similarity which are stored in
     the directory 'memory_images' with the unique id of the object being stored as the title of the image. The images
@@ -562,7 +600,7 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
     duplicate_detections = []  # an array to store the detection data when the class of object already exists in the list of detected objects
     tx, ty, tz, rx, ry, rz = positional_buffer_CAMERAframe(camera_pose, py_translation,
                                                            positional_buffer_array,
-                                                           rotational_buffer_array)  # transaltional data received from the function
+                                                           rotational_buffer_array, rotation_timer)  # transaltional data received from the function
     # tx, ty, tz = get_positional_data(camera_pose,py_translation)
     tx = round(tx, 3)
     ty = round(ty, 3)
@@ -585,6 +623,8 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
             detected_objects = positional_update_left(detected_objects, tx, ty, tz)
         elif "rotated right" in detected_rot:
             detected_objects = positional_update_right(detected_objects, tx, ty, tz)
+        elif "inverted" in detected_rot:
+            detected_objects = positional_update_inverted(detected_objects, tx, ty, tz)
 
     if len(detected_objects) >= 0:  # if length of detected objects is greater than or equal to 0
         for detected in detected_objects:  # scrolling through all the entries of the detected objects list
@@ -634,16 +674,16 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
             for detected in detected_objects: #scrolling through the index of detected_objects
                 exist_value = False     #a boolean function to judge if the same object exists in the list
                 if detected[1] == entry[0]: #the labels match
-                    if (abs(entry[1]) - abs(detected[2])) > 0.01 or (abs(entry[2]) - abs(detected[3])) > 0.01 or (
-                            abs(entry[3]) - abs(detected[4])) > 0.01: #the distances don't match
-                        #exist_value = True
+                    if abs(abs(entry[1]) - abs(detected[2])) > 0.1 and abs(abs(entry[2]) - abs(detected[3])) > 0.1 and abs(
+                            abs(entry[3]) - abs(detected[4])) > 0.1: #the distances don't match
+                        exist_value = True
                         if image_compare_hist(cropped_image, detected[0]) == False: # the objects don't look similar
                             exist_value = True
             if exist_value is True:     #if the object is unique it is appended into the list by giving it a unique ID
                 print("True")
                 id = random.randint(1, 1000000000)
                 detected_o = [id, entry[0], round((entry[1] - tx), 3), round((entry[2] - ty), 3),
-                              round((entry[3] - tz), 3), "new"]
+                              round((entry[3] - tz), 3), "new", "no rotation"]
                 detected_objects.append(detected_o)
                 present_image = cv2.imread("present_image.jpg")
                 cv2.imwrite("memory_images/{}.jpg".format(id),
@@ -690,11 +730,11 @@ def image_compare_hist(cropped_image, duplicate_id):
     h1 = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2BGR)  # the Alpha channel is removed
     cv2.imwrite("present_image.jpg", h1)  # the present object instance is saved in memory
     h1 = Image.open("present_image.jpg")  # present image is opened for recognition
-    h2 = Image.open("memory_images/{}.jpg".format(duplicate_id))  # the image to be compared is opened for comparison
-    '''try:
+    #h2 = Image.open("memory_images/{}.jpg".format(duplicate_id))  # the image to be compared is opened for comparison
+    try:
         h2 = Image.open("memory_images/{}.jpg".format(duplicate_id))
     except:
-        h2 = Image.open("present_image.jpg")'''
+        h2 = Image.open("present_image.jpg")
     diff = ImageChops.difference(h1, h2).histogram()  # the histograms of the 2 images are compared
     sq = (value * (i % 256) ** 2 for i, value in
           enumerate(diff))  # a weighting function is applied to provide equal weights to all colours
