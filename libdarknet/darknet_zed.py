@@ -486,18 +486,11 @@ def main(argv):
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
             #Bridge.opfileprint(str(detections))
-            '''imu_data=sensor_data.get_imu_data()
-            imu = sl.IMUData.get_linear_acceleration(imu_data)
-            print("imu : ", imu)'''
 
             bench_time = time.time()  # setting checkpoint for the loop
             mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))
 
             tracking_state = cam.get_position(camera_pose, sl.REFERENCE_FRAME.LAST)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
-            #print(tracking_state)
-            '''if tracking_state == sl.POSITIONAL_TRACKING_STATE.OK:  # activates only when the poisitional tracking state is in 'OK' state
-                tx, ty, tz = Bridge.get_positional_data(camera_pose,
-                                                 py_translation)  # gets translation and rotation data as a string'''
 
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
             for detection in detections:
@@ -519,11 +512,7 @@ def main(argv):
                 distance = "{:.2f}".format(distance)
                 distance_data = str(label) + ", position from camera x = " + str(round(x, 2)) + " m,  y= " + str(
                     round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
-                # print(distance_data, label)
 
-                # detected_objects.append(detected_o)
-                # print(detected_o)
-                # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
                 cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                         x_coord + x_extent)]
                 #detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image, processes, positional_buffer_array, rotational_buffer_array, rotation_timer)
@@ -533,8 +522,6 @@ def main(argv):
                             x_coord + x_extent)]  # cropping image to the size of the object bounding box
                     # mask[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] = color_test(cropped_image)  # getting the color output from the color recognition function
                     #color_string = Bridge.get_color(cropped_image)  # getting colour output from the function as a string
-
-
                     thresh_color = 10
                     #mask = Bridge.image_segmentation_colour(image, mask, y_coord, y_extent, x_coord, x_extent,thresh_color, bounds)  # segmentation based on colour with adaptive threshold range
 
@@ -567,11 +554,10 @@ def main(argv):
             #Bridge.opfileprint(str(detected_objects))
             Bridge.socket_server_detected_objects(str(detected_objects))
             Bridge.socket_server_status(str(detections), point_cloud_data)
-            # detected_objects.clear()
-            output = time.time() - probs
+            # output = time.time() - probs
             # log.info("Detection time: {}".format(bench_time - start_time))
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            #log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
+            # log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
