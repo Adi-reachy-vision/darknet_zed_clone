@@ -1,35 +1,60 @@
-from sys import argv
-import darknet_zed
-import multiprocessing
+import socket
+import sys
+import threading
 
 
-def images():
-    darknet_zed.main(argv)      #calls upon the main function of darknet_zed
+def opfileread():
+    Fileman = open('YOLO_OUTPUT', 'r')  # opening yolo_output with a read command
+    out = Fileman.read()  # reading yolo_output
+    z = out.split("'")  # splitting the string into a list based on " ' " separator
+    x = 1  # initiating a count variable to iterate the list
+    while x < len(z):  # a while loop to iterate through the list and print odd values
+        print(z[x])
+        x += 2
 
 
-def printop(detections, count):    #prints output for the detected objects (once)
-    i = 0
-    for _ in detections:
-        detect: list = detections[i]  # a list of detected objects from darknet_zed as a string holding label, positional and class info
+def socket_client_detection():
+    # Create a UDP socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_address = ('localhost', 10000)
+    sock.bind(server_address)
+    try:
+        # Receive response from the server
+        data, server = sock.recvfrom(4096)
+        detection_data = str(data)
+        z = detection_data.split("//")  # splitting the string into a list based on " ' " separator
+        detection = z[0]
+        point_cloud = z[1]
+        point_cloud_split = point_cloud.split(",")
+        print(detection, "\n", point_cloud)
+        x = 0  # initiating a count variable to iterate the list
+        while x < len(point_cloud_split):  # a while loop to iterate through the list and print odd values
+            print(point_cloud_split[x])
+            x += 1
+    finally:
+        sock.close()
 
-        for __ in detect:
-            det = detect[0]             # a new variable to hold just the label information
+def socket_client_detected_memory():
+    # Create a UDP socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_address = ('localhost', 20000)
+    sock.bind(server_address)
+    try:
+        # Receive response from the server
+        data, server = sock.recvfrom(4096)
+        detection_data = str(data)
+        z = detection_data.split("]")  # splitting the string into a list based on " ' " separator
+        x = 0  # initiating a count variable to iterate the list
+        while x < len(detection_data):  # a while loop to iterate through the list and print odd values
+            print(detection_data[x])
+            x += 1
+    finally:
+        sock.close()
 
-        i += 1                          #an iterative value to move the cursor to the
-        print(det)                      # next detected obejct and it's information in the detect list variable
+while True:  # a while loop to iterate through different user inputs
+    txt = input("Would you like to see?")  # Taking user input
+    if txt == "y":
+        socket_client_detection()
 
-
-processes = []                          # a list for holding process information for parallel processing
-
-z = multiprocessing.Process(target=images)          #intention to start darknet_zed file to ensure image processing runs in the background irrespective of printing values
-z.start()                                           #starting darknet_zed
-processes.append(z)                                 #attaching darknet_zed to a list of processes that can simultaneously run
-
-zx = multiprocessing.Process(target=printop)        #printing list of detected objects
-zx.start()
-processes.append(zx)
-
-"""zx1 = multiprocessing.Process(target=print("Hello"))
-zx1.start()
-processes.append(zx1)
-"""
+    if txt == "yy":
+        socket_client_detected_memory()

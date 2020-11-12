@@ -22,7 +22,7 @@ import statistics
 import getopt
 from ctypes import *
 import numpy as np
-import cv2
+import cv2 as cv2
 import pyzed.sl as sl
 import Bridge
 
@@ -391,7 +391,7 @@ def main(argv):
     init.coordinate_units = sl.UNIT.METER
     init.depth_minimum_distance = 0.20
     init.camera_resolution = sl.RESOLUTION.HD720
-    init.depth_mode = sl.DEPTH_MODE.ULTRA
+    init.depth_mode = sl.DEPTH_MODE.QUALITY
     init.camera_fps = 60
 
     cam = sl.Camera()
@@ -459,8 +459,13 @@ def main(argv):
     detected_objects = []
     grasp_y_delay = []
     shallow_cluster_y = []
+    positional_buffer_array = []
+    rotational_buffer_array = []
+    rotation_timer = False
+    live_feed = None
     key = ''
-    sensors_data = sl.SensorsData()
+    sensor_data = sl.SensorsData()
+    imu_data = sl.IMUData()
     transform = sl.Transform()
     tracking_params = sl.PositionalTrackingParameters(transform)  # initialises positional tracking
     cam.enable_positional_tracking(tracking_params)  # enables positional tracking
@@ -469,9 +474,9 @@ def main(argv):
         point_cloud_data = ""
         probs = time.time()
         err = cam.grab(runtime)
-
         camera_pose = sl.Pose()
         if err == sl.ERROR_CODE.SUCCESS:
+            cam.get_sensors_data(sensor_data, sl.TIME_REFERENCE.IMAGE)
             cam.retrieve_image(mat, sl.VIEW.LEFT)
             image = mat.get_data()
             py_translation = sl.Translation()
@@ -480,16 +485,10 @@ def main(argv):
             # Do the detection
             start_time = time.time()  # start time of the loop
             detections = detect(netMain, metaMain, image, thresh)
-            #Bridge.opfileprint(str(detections))
-
+            detection_write = str(detections) + " \n"
             bench_time = time.time()  # setting checkpoint for the loop
             mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))
-
             tracking_state = cam.get_position(camera_pose, sl.REFERENCE_FRAME.LAST)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
-            if tracking_state == sl.POSITIONAL_TRACKING_STATE.OK:  # activates only when the poisitional tracking state is in 'OK' state
-                tx, ty, tz = Bridge.get_positional_data(camera_pose,
-                                                 py_translation)  # gets translation and rotation data as a string
-
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
             for detection in detections:
                 label = detection[0]
@@ -505,47 +504,29 @@ def main(argv):
                 # boundingBox = [[x_coord, y_coord], [x_coord, y_coord + y_extent], [x_coord + x_extent, y_coord + y_extent], [x_coord + x_extent, y_coord]]
                 thickness = 1
                 x, y, z = get_object_depth(depth, bounds)
-
                 distance = math.sqrt(x * x + y * y + z * z)
                 distance = "{:.2f}".format(distance)
                 distance_data = str(label) + ", position from camera x = " + str(round(x, 2)) + " m,  y= " + str(
                     round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
-                # print(distance_data, label)
-
-                # detected_objects.append(detected_o)
-                # print(detected_o)
-                # print("location data: x: {0}, y: {1}, z: {2} \n".format(x, y, z))
-                cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
-                        x_coord + x_extent)]
-                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image, existing_labels=processes)
-
+                cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
+                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image, processes, positional_buffer_array, rotational_buffer_array, rotation_timer)
                 if label == "bicycle":  # a binding statement to direct colour recognition
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
                             x_coord + x_extent)]  # cropping image to the size of the object bounding box
                     # mask[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] = color_test(cropped_image)  # getting the color output from the color recognition function
-                    color_string = Bridge.get_color(cropped_image)  # getting colour output from the function as a string
-                    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]
-
-                    try:
-                        color = image[bounds[0], bounds[1]]
-                    except:
-                        color = 0
-
+                    #color_string = Bridge.get_color(cropped_image)  # getting colour output from the function as a string
                     thresh_color = 10
-                    #mask = Bridge.image_segmentation_colour(cropped_image, color, mask, y_coord, y_extent, x_coord, x_extent,thresh_color)  # segmentation based on colour with adaptive threshold range
-
+                    #mask = Bridge.image_segmentation_colour(image, mask, y_coord, y_extent, x_coord, x_extent,thresh_color, bounds)  # segmentation based on colour with adaptive threshold range
                     cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
-                if label == "laptop":  # if statement to filter the classes needed for segmentation
+                if label == "cup":  # if statement to filter the classes needed for segmentation
                     # print(x, y, z, len(detected_objects))
-                    #image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y)
+                    image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y)
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0),
-                                2)  # pasting label on top of the segmentation mask
-
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)  # pasting label on top of the segmentation mask
                 else:  # j += 1
                     cv2.putText(image, label + " " + (str(distance) + " m"),  # pasting label on top of detected object
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
@@ -555,14 +536,31 @@ def main(argv):
                                   (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
                                   color_array[detection[3]], int(thickness))
                 point_cloud_data += distance_data
-
+            #function to enable control by Overlord_camera_function
+            #if you enter 'y' - it shows detection_camera frame
+            #if you enter 'n' - it shows a blank image
+            '''camera_control = Bridge.socket_client_control()
+            if camera_control == "b'live'":
+                if live_feed is False:
+                    cv2.destroyWindow("mask")
+                    live_feed = True
+                else:
+                    live_feed = True
+                cv2.imshow("ZED", image)
+            else:
+                if live_feed is True:
+                    cv2.destroyWindow("ZED")
+                    live_feed = False
+                else:
+                    live_feed = False
+                cv2.imshow("mask", mask)'''
             cv2.imshow("ZED", image)
-            # cv2.imshow("mask", mask)
             key = cv2.waitKey(5)
             print(detected_objects)
+            Bridge.opfileprint(str(detection_write))
+            Bridge.socket_server_detected_objects(str(detected_objects))
             Bridge.socket_server_status(str(detections), point_cloud_data)
-            # detected_objects.clear()
-            output = time.time() - probs
+            # output = time.time() - probs
             # log.info("Detection time: {}".format(bench_time - start_time))
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
             #log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
