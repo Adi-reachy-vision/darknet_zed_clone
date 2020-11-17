@@ -461,6 +461,7 @@ def main(argv):
     shallow_cluster_y = [] # array to store grasping y-axis points based on shallow depth of the object over multiple frames
     positional_buffer_array = [] # array to store positional data over multiple frames
     rotational_buffer_array = [] # array to store rotational data over multiple frames
+    x_centroid = []
     #live_feed = None
     key = ''
     sensor_data = sl.SensorsData() # variable to store sensor data from ZED camera
@@ -480,17 +481,18 @@ def main(argv):
             cam.retrieve_measure(point_cloud_mat, sl.MEASURE.XYZRGBA) # point cloud data extracted in variable - depth
             depth = point_cloud_mat.get_data()
             # Do the detection
-            start_time = time.time()  # start time of the loop - checkpoint
+            start_time = time.time()  # start time of the loop - checkpoint (pre-detection)
             detections = detect(netMain, metaMain, image, thresh) # detections performed and obtained from yolo framework
-            bench_time = time.time()  # setting checkpoint for the loop - checkpoint
+            bench_time = time.time()  # setting checkpoint for the loop - checkpoint (post detection)
             mask = np.zeros((image.shape[0], image.shape[1], image.shape[2])) # a black image, the size of the input camera frame
             tracking_state = cam.get_position(camera_pose, sl.REFERENCE_FRAME.LAST)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
             for detection in detections:
                 label = detection[0] # label of the object class
                 confidence = detection[1] # confidence of the detection
+
                 pstring = label + ": " + str(np.rint(100 * confidence)) + "%" #detection data that can be showed in terminal window
-                # log.info(pstring)
+
                 bounds = detection[2] #bounding box coordinates for the object
                 y_extent = int(bounds[3])
                 x_extent = int(bounds[2])
@@ -498,41 +500,61 @@ def main(argv):
                 x_coord = int(bounds[0] - bounds[2] / 2)
                 y_coord = int(bounds[1] - bounds[3] / 2)
                 # boundingBox = [[x_coord, y_coord], [x_coord, y_coord + y_extent], [x_coord + x_extent, y_coord + y_extent], [x_coord + x_extent, y_coord]]
+
                 thickness = 1
+
                 x, y, z = get_object_depth(depth, bounds) # distance estimated by the point cloud data
                 distance = math.sqrt(x * x + y * y + z * z)
                 distance = "{:.2f}".format(distance) # determining the distance in eucilidian distance format
+
                 distance_data = str(label) + ", position from camera x = " + str(round(x, 2)) + " m,  y= " + str(
                     round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
-                cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] # cropped image for image comparison
+
+                cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] # cropped image for image comparison or colour recognition
+
                 detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image, existing_labels, positional_buffer_array, rotational_buffer_array)
-                if label == "bicycle":  # a binding statement to direct colour recognition
-                    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
-                            x_coord + x_extent)]  # cropping image to the size of the object bounding box
+
+                if label == "cup":  # a binding statement to direct colour recognition
+
+                    cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]  # cropping image to the size of the object bounding box
+
                     # mask[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] = color_test(cropped_image)  # getting the color output from the color recognition function
-                    #color_string = Bridge.get_color(cropped_image)  # getting colour output from the function as a string
+
+                    color_string = Bridge.get_color(cropped_image)  # getting colour output from the function as a string
+
                     thresh_color = 10
-                    #mask = Bridge.image_segmentation_colour(image, mask, y_coord, y_extent, x_coord, x_extent,thresh_color, bounds)  # segmentation based on colour with adaptive threshold range
+
+                    #mask = Bridge.image_segmentation_colour(image, mask, y_coord, y_extent, x_coord, x_extent,thresh_color, bounds)
+
+                    # segmentation based on colour with adaptive threshold range
+
                     cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
                                 2)  # pasting label on top of the segmentation mask
-                if label == "cup":  # if statement to filter the classes needed for segmentation
-                    # print(x, y, z, len(detected_objects))
-                    image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y)
+
+                elif label == "shoe":  # if statement to filter the classes needed for segmentation
+
+                    image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y, x_centroid)
                     # performing image segmentation on the image frame
+
                     cv2.putText(image, label + " " + (str(distance) + " m"),
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)  # pasting label on top of the segmentation mask
-                else:  # j += 1
+
+                else:  # general object detection and labeling
+
                     cv2.putText(image, label + " " + (str(distance) + " m"),  # pasting label on top of detected object
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
                     cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
                                   # pasting bounding box around detected object
                                   (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
                                   color_array[detection[3]], int(thickness))
+
                 point_cloud_data += distance_data # adding distance data to be displayed over the socket display in Overlord
+
             #function to enable control by Overlord_camera_function
             #if you enter 'y' - it shows detection_camera frame
             #if you enter 'n' - it shows a blank image
@@ -551,13 +573,14 @@ def main(argv):
                 else:
                     live_feed = False
                 cv2.imshow("mask", mask)'''
+
             cv2.imshow("ZED", image)
             key = cv2.waitKey(5)
             print(detected_objects)
             Bridge.opfileprint(str(detections)) # writing detection data for the frame into file "YOLO_OUTPUT.txt"
             Bridge.socket_server_detected_objects(str(detected_objects)) # displaying detected objects (memory) over a socket connection
             Bridge.socket_server_status(str(detections), point_cloud_data) # displaying detection data of the frame over a socket connection
-            # output = time.time() - probs
+            # output = time.time() - probs # check point to see total loop time
             # log.info("Detection time: {}".format(bench_time - start_time)) #checking how long the detection takes
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
             #log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
