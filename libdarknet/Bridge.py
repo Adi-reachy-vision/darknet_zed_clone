@@ -99,7 +99,7 @@ def opfileprint(detection):
 
 
 def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay,
-                             shallow_cluster_y):
+                             shallow_cluster_y, x_centroid):
     '''Perform image segmentation based on depth information received by ZED camera's point cloud data.
     The depth of the pixels in the bounding box are added to a flattened array and after averaging their depth,
     the mean depth of the object is received and the depth of the pixels is once again compared to analyse if the
@@ -160,6 +160,10 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
 
     for i in range(y_extent):  # element by element multiplication of the height of the bounding box
         y_val = y_coord + (i - 1)
+        count = 0
+        if len(x_centroid) > 0:
+            median_x = statistics.median(x_centroid)
+            x_centroid.clear()
         for j in range(x_extent):  # element by element multiplication of the width of the bounding box
             x_val = x_coord + (j - 1)
             try:  # encapsulating the depth calculation in a try - catch block to prevent value errors
@@ -172,6 +176,8 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
 
                 if calc_depth < median_large:  # comparing the pixel distance from the threshold
                     # min_object_depth.append(calc_depth)
+                    count += 1
+                    x_centroid.append(count)
                     if calc_depth == shallow_depth:
                         shallow_grasp_y.append(
                             y_val)  # storing all y-axis values which have the depth equal to the shallowest depth in the bounding box
@@ -181,18 +187,20 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
 
                     if y_val == y_grasp:  # change the colour of the pixels to highlight the ideal location for grasping the object
                         grasp_array_x.append(x_val)  # store the x-axis coordinate which is lesser than the depth
-                    if y_val == y_shallow:
+                    '''if y_val == y_shallow:
                         shallow_grasp_x.append(
-                            x_val)  # store the x-axis coordinate which is closer than the shallowest depth of the object
-                    else:
-                        image[y_val, x_val] = (0, 0, 255, 0)  # highlighting the pixels whose depth is lesser than
+                            x_val)'''  # store the x-axis coordinate which is closer than the shallowest depth of the object
+                    '''else:
+                        image[y_val, x_val] = (0, 0, 0, 0)'''  # highlighting the pixels whose depth is lesser than
                     # the median depth of the bounding box with a red colour
+
             except:
                 pass
+            #print(count)
     y_grasp = grasp_array_y[(len(grasp_array_y) - 1)]
     y_shallow = shallow_grasp_y[(len(shallow_grasp_y) - 1)]
     height = len(grasp_array_y)
-    # print(len(grasp_array_x))
+    print(median_x - len(grasp_array_x))
     if len(grasp_array_x) > 0:
         x_pt1 = int(grasp_array_x[0])  # the 1st x-axis coordinates which happen to be lesser than the median depth of
         # the object in the previous frame
@@ -203,6 +211,8 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
         y_grasp = int(y_grasp - height)  # the ideal point to grab the object in the y-axis
         cv2.circle(image, (x_pt1, y_grasp), 20, (0, 255, 0, 0), -1)  # forming a circle around the first point
         cv2.circle(image, (x_pt2, y_grasp), 20, (0, 255, 0, 0), -1)  # forming a circle around the second point
+        method = grasp_method(median_large,
+                              grasp_array_x)  # function for comparing width of the object vs width of the robotic hand
 
     if len(shallow_grasp_x) > 0:
         x_pt1 = int(shallow_grasp_x[0])  # the 1st x-axis coordinates which happen to be lesser than the median depth of
@@ -220,13 +230,11 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
     shallow_cluster_y.append(
         y_shallow)  # apending the value of y_shallow into the array to ensure it can be recalled in the next frame
 
-    method = grasp_method(median_large,
-                          grasp_array_x)  # function for comparing width of the object vs width of the robotic hand
     return image  # returning a modified image which has depth based segmentation mask
     # marked on the image in the area of the bounding box
 
 
-def median_average(median, median_max, median_array):
+def median_average(median, median_max, avg_median):
     '''Averaging function to stablise the depth obtained from 'image_segmentation_depth'. The idea behind this was
     behind the assumption that depth estimate of one frame was accurate but the depth over multiple frames would allow
     a better understanding of the depth of the object which provides the program with it's segmentation mask.'''
@@ -236,18 +244,18 @@ def median_average(median, median_max, median_array):
         median_large = np.mean(median_max)  # provide a mean value for the median values stored in the median_max array
         median_max.clear()  # once the averaging function is performed, the median_max array is cleared.
         median_large = float(round(median_large, 3))  # rounding the median average to 3 decimal points
-        median_array.append(median_large)  # storing the average avergae median in a new array to ensure,
+        avg_median.append(median_large)  # storing the average avergae median in a new array to ensure,
         # the value is stored over multiple frames and doesnt get
         # reinitialised every time, the function is called
         # print("Values after comparison: ", median_large, median, len(median_max))
         if abs(median_large - median) > 2.00:  # if the median average has moved more than 2 metres from the
             # median of the present frame than it means, the object has moved
             # the avergaing function over multiple feames has to be restarted.
-            median_array.clear()
+            avg_median.clear()
         break
 
     try:
-        return median_array[len(median_array) - 1]  # return the average function if present
+        return avg_median[len(avg_median) - 1]  # return the average function if present
     except:
         return median  # if the average values aren't present return the median of the
         # past frame which was being analysed
@@ -258,7 +266,7 @@ def grasp_method(median_large, grasp_array_x):
     of the grasping points. If they are greater than the width of the curved hand, then it will be uncomfortable for
     grasping the object in the present pose and thus, will have to be changed, to be more accessible by the hand for
     a better grip.'''
-    min_object = round(min(grasp_array_x), 3)
+    min_object = min(grasp_array_x)
     final = median_large - min_object
     if final < 0.7:
         method = "Grasp"
@@ -388,15 +396,14 @@ def get_color(image):
 
 
 def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_translation, cropped_image, existing_labels,
-                         positional_buffer_array, rotational_buffer_array, rotation_timer):
+                         positional_buffer_array, rotational_buffer_array):
     ''' Detected Objects are stored in an array, with verification for uniqueness of the detection being performed by
     location data (it being atleast half a meter in any direction -x, y, z) and image similarity which are stored in
     the directory 'memory_images' with the unique id of the object being stored as the title of the image. The images
      are compared using the functions 'get_ssim' & 'similarity'. '''
     tx, ty, tz, rx, ry, rz = positional_buffer_CAMERAframe(camera_pose, py_translation,
                                                            positional_buffer_array,
-                                                           rotational_buffer_array,
-                                                           rotation_timer)  # transaltional, rotational data received from the buffer function
+                                                           rotational_buffer_array)  # transaltional, rotational data received from the buffer function
     # tx, ty, tz = get_positional_data(camera_pose,py_translation)
     tx = round(tx, 3)
     ty = round(ty, 3)
@@ -406,7 +413,7 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
     z = round(z, 3)
     # print(tx, ty, tz)
     duplicate_detections = []  # an array to store the detection data when the class of object already exists in the list of detected objects
-    exist_values_array = [] #an array that stores the values of duplicate objects from the class to compare it's existence from previous detected data
+    exist_values_array = []  # an array that stores the values of duplicate objects from the class to compare it's existence from previous detected data
 
     '''From the buffer function, the translational and rotational values are stored in between 2 positions of the camera.
     Assisted by the stability of the Camera frame of reference, the values in between 2 zero values are stored in an array
@@ -419,9 +426,8 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
     if rx != 0.0 or ry != 0.0 or rz != 0.0:  # update only when the rotation value is greater than zero
         rotation, detected_objects = rotational_update(detected_objects, rx, ry, rz)
 
-
     if tx != 0.0 or ty != 0.0 or tz != 0.0:  # update only when transaltional value is greater than zero
-        detected_rot = detected_objects[1]
+        detected_rot = detected_objects[0]
         if "no rotation" in detected_rot:
             detected_objects = positional_update(detected_objects, tx, ty, tz)
         elif "rotated left" in detected_rot:
@@ -434,25 +440,9 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
     if len(detected_objects) >= 0:  # if length of detected objects is greater than or equal to 0
         for detected in detected_objects:  # scrolling through all the entries of the detected objects list
             if detected[1] not in existing_labels:
-                existing_labels.append(detected[1])  # storing the unique labels of the detected objects in the existing_labels array (useful
-                                    # for populating first occurences of the onject class in the detcted objects array)
-            if label != detected[1]:  # if condition when the label doesn't match the entry
-                pass
-            elif label == detected[1]:  # if condition when the label of the detected object is similar to label of the entry
-                if abs(abs(x) - abs(int(detected[2]))) > 0.120 and abs(abs(y) - abs(int(detected[3]))) > 0.120 and abs(
-                        abs(y) - abs(int(detected[4]))) > 0.120:
-                    # if the label is same and it is not within 5 cm of the previous instance of the detected object
-                    array_valueid = [label,
-                                     round(x, 3),
-                                     round(y, 3),
-                                     round(z, 3)]  # creating a template to add into the array
-                    if array_valueid not in duplicate_detections:  # if condition when the detected object is not in
-                        # detected object list and is thus, stored in array
-                        # which shall be verified later. It is done to ensure
-                        # that it can be applied when multiple instances of the
-                        # same object are present in the memory.
-
-                        duplicate_detections.append(array_valueid)
+                existing_labels.append(detected[
+                                           1])  # storing the unique labels of the detected objects in the existing_labels array (useful
+                # for populating first occurences of the onject class in the detcted objects array)
 
     if label not in existing_labels:  # the entries into detected object is appended, with first instances of
         # the class is immediately added into the detected_objects list
@@ -463,27 +453,47 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
         detected_objects.append(detected_o)
         cv2.imwrite("/home/adi/Downloads/zed-yolo/libdarknet/images/{}.jpg".format(id),
                     cropped_image)  # the cropped image (bounding box) of the detected object is written into a file
-                                    # (to be used for image comparison and human verification that it is a different object)
+        # (to be used for image comparison and human verification that it is a different object)
     else:
         # if the class already exists, then this method verifies if the object has been
         # detected for the first time and if it has, it is appended into detected_objects.
-        for entry in duplicate_detections:  # scrolling through the list of new occurences of detected objects in a pre-existing class from detected objects
-            for detected in detected_objects:  # scrolling through the index of detected_objects from memory
-                if detected[1] == entry[0]:  # the labels match
-                    subtracted_value = [round(abs(abs(entry[1]) - abs(detected[2])),3),
-                                        round(abs(abs(entry[2]) - abs(detected[3])),3),
-                                        round(abs(abs(entry[3]) - abs(detected[4])),3)]
-                    exist_values_array.append(subtracted_value) #adding subtracted location values of all occurences of detection in the object class into an array
-            exist_values_array = sorted(exist_values_array) #sorting the array in ascending order
-            new_value = exist_values_array[0] # taking the least value of subtraction between new occurence and past occurence
-            if new_value[0] > 0.1 and new_value[2] > 0.1:  # if the object is unique it is appended into the list by giving it a unique ID
-                print("True")
-                id = random.randint(1, 1000000000)
-                detected_o = [id, entry[0], round((entry[1] - tx), 3), round((entry[2] - ty), 3),
-                              round((entry[3] - tz), 3), "new", "no rotation"]
-                detected_objects.append(detected_o)
-                cv2.imwrite("/home/adi/Downloads/zed-yolo/libdarknet/images/{}.jpg".format(id),
-                            cropped_image)  # the cropped image (bounding box) of the detected object is written into a file
+        for detected in detected_objects:  # scrolling through the index of detected_objects from memory
+            if detected[1] == label:  # the labels match
+                cv2.imwrite("present_image.jpg", cropped_image)
+                subtracted_value = [round(abs(abs(x) - abs(detected[2])), 3),
+                                    round(abs(abs(y) - abs(detected[3])), 3),
+                                    round(abs(abs(z) - abs(detected[4])), 3),
+                                    detected[0]]
+                exist_values_array.append(
+                    subtracted_value)  # adding subtracted location values of all occurences of detection in the object class into an array
+        exist_values_array = sorted(exist_values_array)  # sorting the array in ascending order
+        new_value = exist_values_array[
+            0]  # taking the least value of subtraction between new occurence and past occurence
+        present_image = cv2.imread("present_image.jpg")
+        if new_value[0] > 0.2 and new_value[
+            2] > 0.2 and image_compare_hist(present_image, new_value[3],
+                                            label) is False:  # if the object is unique it is appended into the list by giving it a unique ID
+            print("True")
+            id = random.randint(1, 1000000000)
+            detected_o = [id, label, round((x - tx), 3), round((y - ty), 3),
+                          round((z - tz), 3), "new", "no rotation"]
+            detected_objects.append(detected_o)
+            cv2.imwrite("/home/adi/Downloads/zed-yolo/libdarknet/images/{}.jpg".format(id),
+                        cropped_image)  # the cropped image (bounding box) of the detected object is written into a file
+        if new_value[0] > 0.1 and new_value[
+            2] > 0.1 and image_compare_hist(present_image, new_value[3],
+                                            label) is True:  # if the object is is similar to some object from the past but the location has changed,
+                                                            # the entry in the detected objects array is changed with new location information
+            # print("location of ", label, "changed")
+            for detected in detected_objects:
+                if detected[0] == new_value[3]:
+                    id = detected[0] #id is preserved and all the other sections of the entry are replaced with new location of the object
+                    detected_objects.remove(detected)
+                    detected_o = [id, label, round((x - tx), 3), round((y - ty), 3),
+                                  round((z - tz), 3), "new location", "no rotation"]
+                    detected_objects.append(detected_o)
+                    cv2.imwrite("/home/adi/Downloads/zed-yolo/libdarknet/images/{}.jpg".format(id),
+                                cropped_image)  # the cropped image (bounding box) of the detected object is written into a file
 
     return detected_objects
 
@@ -512,8 +522,7 @@ def get_positional_data(camera_pose, py_translation):
     return tx, ty, tz, rx, ry, rz
 
 
-def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer_array, rotational_buffer_array,
-                                  rotation_timer):
+def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer_array, rotational_buffer_array):
     tx, ty, tz, rx, ry, rz = get_positional_data(camera_pose, py_translation)
 
     '''The translational and rotational data given by the camera may have some errors due to the speed of the movement 
@@ -763,12 +772,12 @@ def get_ssim(cropped_image, duplicate_id):
     return ssim
 
 
-def image_compare_hist(cropped_image, duplicate_id):
+def image_compare_hist(cropped_image, duplicate_id, label):
     '''After the shortcoming of the ssim method, this method uses histogram comparison and ImageChops library from PIL
     which accounts for change in pose (rotated or flipped) and is more-reliable even though runs into issues as the object
     detection method primarily uses openCV and thus, the image now has to be first saved (as present_image.jpg using openCV)
     and then called from memory.'''
-    error = 90  # error of margin for the comparison method i.e. if the images are 90% similar than it is the same object
+    error = 95  # error of margin for the comparison method i.e. if the images are 90% similar than it is the same object
     h1 = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2BGR)  # the Alpha channel is removed
     cv2.imwrite("present_image.jpg", h1)  # the present object instance is saved in memory
     time.sleep(0.01)
@@ -783,7 +792,7 @@ def image_compare_hist(cropped_image, duplicate_id):
           enumerate(diff))  # a weighting function is applied to provide equal weights to all colours
     sum_squares = sum(sq)
     rms = math.sqrt(sum_squares / float(h1.size[0] * h1.size[1]))  # performing a root mean square
-
+    # print(label, "rms value: ", rms)
     # Error is an arbitrary value, based on values when
     # comparing 2 rotated images & 2 different images.
     return rms < error
