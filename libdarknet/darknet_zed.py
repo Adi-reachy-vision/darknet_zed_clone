@@ -462,6 +462,7 @@ def main(argv):
     positional_buffer_array = [] # array to store positional data over multiple frames
     rotational_buffer_array = [] # array to store rotational data over multiple frames
     x_centroid = []
+    x_centroid_marker = []
     #live_feed = None
     key = ''
     sensor_data = sl.SensorsData() # variable to store sensor data from ZED camera
@@ -512,8 +513,6 @@ def main(argv):
 
                 cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] # cropped image for image comparison or colour recognition
 
-                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,py_translation, cropped_image, existing_labels, positional_buffer_array, rotational_buffer_array)
-
                 if label == "cup":  # a binding statement to direct colour recognition
 
                     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)]  # cropping image to the size of the object bounding box
@@ -528,14 +527,11 @@ def main(argv):
 
                     # segmentation based on colour with adaptive threshold range
 
-                    cv2.putText(image, color_string + " " + label + " " + (str(distance) + " m"),
-                                (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
-                                2)  # pasting label on top of the segmentation mask
+                    label = color_string + " " + label
 
-                elif label == "shoe":  # if statement to filter the classes needed for segmentation
+                if label == "Blue cup":  # if statement to filter the classes needed for segmentation
 
-                    image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y, x_centroid)
+                    image = Bridge.image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay, shallow_cluster_y, x_centroid, x_centroid_marker)
                     # performing image segmentation on the image frame
 
                     cv2.putText(image, label + " " + (str(distance) + " m"),
@@ -552,6 +548,10 @@ def main(argv):
                                   # pasting bounding box around detected object
                                   (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
                                   color_array[detection[3]], int(thickness))
+
+                detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,
+                                                               py_translation, cropped_image, existing_labels,
+                                                               positional_buffer_array, rotational_buffer_array)
 
                 point_cloud_data += distance_data # adding distance data to be displayed over the socket display in Overlord
 

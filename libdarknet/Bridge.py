@@ -1,3 +1,10 @@
+'''Darknet_zed auxillary code developed for 3D object detection by Reachy.
+
+Developed by :- Mohammed Zafar Faraz
+Supervisors :- Venkata Tarigoppula, David Grayden
+
+This package contains code developed for the ZED Camera 2 running on Jetson tx2.'''
+
 import io
 import math
 import random
@@ -29,7 +36,7 @@ def socket_server_status(detections, point_cloud_data):
                          socket.SOCK_DGRAM)  # SOCK_DGRAM stands for datagram which is UDP's method of data transmission
     server_address = ('localhost',
                       10000)  # the local host address and port number. If you run into an error try changing,
-    # as the port might be occupied by some other process
+                              # as the port might be occupied by some other process
     message = detections + "//" + point_cloud_data  # the detected data separated by a separator '//' from the point
     # cloud location data of x, y, z value of the bounding box for
     # location estimation of the object in the environment
@@ -69,15 +76,18 @@ def socket_server_detected_objects(detected_objects):
 
 
 def socket_client_control():
+    '''A remote control which needs to be refreshed but can be used to control the image output ZED camera, though the
+    detection data will still flow into detected objects.'''
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_address = ('localhost', 30000)
-    sock.bind(server_address)
+    server_address = ('localhost', 30000)   # the local host address and port number. If you run into an error try changing, as the port might be occupied by some other process
+    sock.bind(server_address)   # client binding statement to the port
     try:
         # Receive response from the server
-        data, server = sock.recvfrom(4096)
+        data, server = sock.recvfrom(4096) # receiving data from the socket which tells if the camera window "ZED" should show and image output or a blank mask
         detection_data = str(data)
     finally:
-        sock.close()
+        sock.close() # closing the socket once all the data has been transmitted or received.
 
     return detection_data
 
@@ -89,17 +99,14 @@ def opfileprint(detection):
     is present in Overlord.py'''
 
     Fileman = open('YOLO_OUTPUT', 'w')  # creating and opening file in the write configuration
-    '''for i in detection:
-        Fileman.write('\n')
-        Fileman.write(i)  # writing the detection into the file'''
 
-    Fileman.write('\n')
-    Fileman.write(detection)  # writing the detection into the file
-    Fileman.close()
+    for i in detection:
+        Fileman.write('\n')
+        Fileman.write(i)  # writing the detection into the file
 
 
 def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image, median_max, avg_median, grasp_y_delay,
-                             shallow_cluster_y, x_centroid):
+                             shallow_cluster_y, x_centroid, x_centroid_marker):
     '''Perform image segmentation based on depth information received by ZED camera's point cloud data.
     The depth of the pixels in the bounding box are added to a flattened array and after averaging their depth,
     the mean depth of the object is received and the depth of the pixels is once again compared to analyse if the
@@ -112,16 +119,20 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
      then finding the median values from the pixel to locate the center of the object in terms of y-axis values. Once,
      the central y-axis coordinates have been narrowed down, it's respective x-axis values are at the edge of the
      segmentation mask are highlighted using a green circle marker.'''
+
     median_depth = []  # initialising an array to store the depth of all pixels in the bounding box
     grasp_array_y = []  # initialising an array to store the pixels in the bounding box lesser than the median depth
     grasp_array_x = []  # initialising an array to store the depth of all pixels on the x-axis for grasping point
     # min_object_depth = [] # initialising an array to store the minimum depth of bounding box for grasping technique
     shallow_grasp_x = []  # initialising an array to store the depth of all pixels on x-axis for grasping points corresponding to shallowest point on the object
     shallow_grasp_y = []  # initialising an array to store the depth of all pixels on y-axis for grasping points corresponding to shallowest point on the object
+    x_marker = {} # dictionary to store all x-axis coordinates belonging to the object for every y-axis coordinate
+    geometrical_centroid_x = [] # registering coordinates on the x-axis line for the y-axis marker which has the most x-axis coordinates
     height = 0
 
     '''FOR loop that calculates the median depth of the bounding box by storing the pixel depth data from the
     point cloud data in an array - median_depth.'''
+
     for i in range(y_extent):  # element by element multiplication of the height of the bounding box
         y_val = y_coord + (i - 1)
         for j in range(x_extent):  # element by element multiplication of the width of the bounding box
@@ -135,7 +146,7 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
             except:
                 pass
 
-    shallow_depth = min(median_depth)  # shallowest depth value in the bounding box
+    shallow_depth = min(median_depth)  # shallowest depth value in the bounding box fro shallow_grasp_y array calculation
     median = float(round(np.median(median_depth), 2))  # calculating median depth using numpy median method
     median_large = median_average(median, median_max, avg_median)  # an averaging function to stablise the depth over
     # multiple frames by finding median depth over multiple
@@ -148,22 +159,27 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
         # median depth of the object in the previous frame
         y_shallow = shallow_cluster_y[
             len(shallow_cluster_y) - 1]  # the y-axis coordinates which happen to be the shallowest point on the object
+        geomtrical_centroid = x_centroid_marker[len(x_centroid_marker) - 1]
+        geomtrical_centroid = geomtrical_centroid[0] # the y-axis cooridnate having the most number of corresponding x-axis coordinates
     except:
         y_grasp = y_coord  # in case of an error return the y_coord value
         y_shallow = y_coord
+        geomtrical_centroid = y_coord
 
     '''FOR loop where the median depth values are calculated and compared with individual pixels and respective actions are performed :- 
     1. the pixel is highlighted with red colour to form a mask depicting the tight fitting boundaries of the object
     2. 2 green points that mark ideal points of grasping when the center of the mass of the object is in the centroid of the object
     3. 2 red points that mark ideal grasping points when the shallowest point on the object is considered in a geometrically
-        non - homogeneous object (curved objects)'''
+        non - homogeneous object (curved objects)
+    4. 2 black points which mark the y-axis coordinate that has the most x-axis coordinates on the object attached to it (highlighted
+    because the widest point on the vertical axis could present with the best location for grabbing the object)'''
 
     for i in range(y_extent):  # element by element multiplication of the height of the bounding box
         y_val = y_coord + (i - 1)
         count = 0
         if len(x_centroid) > 0:
-            median_x = statistics.median(x_centroid)
-            x_centroid.clear()
+            x_marker[y_val] = len(x_centroid) # store the number of x-axis coordinates falling closer to the camera than the median depth for calculating centroid w.r.t. x-axis
+            x_centroid.clear() # emptying the array to store next set of x-axis coordinates for the new y_val (y-axis coordinates)
         for j in range(x_extent):  # element by element multiplication of the width of the bounding box
             x_val = x_coord + (j - 1)
             try:  # encapsulating the depth calculation in a try - catch block to prevent value errors
@@ -177,7 +193,7 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
                 if calc_depth < median_large:  # comparing the pixel distance from the threshold
                     # min_object_depth.append(calc_depth)
                     count += 1
-                    x_centroid.append(count)
+                    x_centroid.append(count) # storing the count in the array corresponding to the x-axis coordinates which belong to the y-axis values
                     if calc_depth == shallow_depth:
                         shallow_grasp_y.append(
                             y_val)  # storing all y-axis values which have the depth equal to the shallowest depth in the bounding box
@@ -187,20 +203,37 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
 
                     if y_val == y_grasp:  # change the colour of the pixels to highlight the ideal location for grasping the object
                         grasp_array_x.append(x_val)  # store the x-axis coordinate which is lesser than the depth
-                    '''if y_val == y_shallow:
+                    if y_val == y_shallow:
                         shallow_grasp_x.append(
-                            x_val)'''  # store the x-axis coordinate which is closer than the shallowest depth of the object
+                            x_val)  # store the x-axis coordinate which is closer than the shallowest depth of the object
+                    if y_val == geomtrical_centroid:
+                        geometrical_centroid_x.append(x_val)
                     '''else:
                         image[y_val, x_val] = (0, 0, 0, 0)'''  # highlighting the pixels whose depth is lesser than
-                    # the median depth of the bounding box with a red colour
+                    # the median depth of the bounding box with a red colour (image segmentation based on depth)
 
             except:
                 pass
-            #print(count)
-    y_grasp = grasp_array_y[(len(grasp_array_y) - 1)]
-    y_shallow = shallow_grasp_y[(len(shallow_grasp_y) - 1)]
+    x_marker = sorted(x_marker.items(), key=lambda x:x[1], reverse=True) # sorting the dictionary to find the y-axis value which has the widest x-axis values belonging to the object in the bounding box (black points)
+    x_marker_first = x_marker[0]
+
+    '''Black points prediction on the object which give the prospective y-axis coordinates having the widest x-axis width.'''
+
+    if len(geometrical_centroid_x) > 0:
+        x_pt1 = int(geometrical_centroid_x[0])  # the 1st x-axis coordinates which happen to be lesser than the median depth of
+        # the object in the previous frame
+        x_pt2 = int(geometrical_centroid_x[len(geometrical_centroid_x) - 1])  # the 2nd x-axis coordinates which happen to be lesser than
+                                                                            # the median depth of the object in the previous frame
+        y_grasp = x_marker_first[0]  # the ideal point to grab the object in the y-axis
+        cv2.circle(image, (x_pt1, y_grasp), 20, (0, 0, 0, 0), -1)  # forming a circle around the first point
+        cv2.circle(image, (x_pt2, y_grasp), 20, (0, 0, 0, 0), -1)  # forming a circle around the second point
+
+    y_grasp = grasp_array_y[(len(
+        grasp_array_y) - 1)]  # storing y-axis values in a variable to determine geometric centre with respect to the height of the object (green points)
     height = len(grasp_array_y)
-    print(median_x - len(grasp_array_x))
+
+    '''Green points prediction which is at the mid-point of the height of the object segmented based on the pixels belonging specifically to the object.'''
+
     if len(grasp_array_x) > 0:
         x_pt1 = int(grasp_array_x[0])  # the 1st x-axis coordinates which happen to be lesser than the median depth of
         # the object in the previous frame
@@ -213,6 +246,12 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
         cv2.circle(image, (x_pt2, y_grasp), 20, (0, 255, 0, 0), -1)  # forming a circle around the second point
         method = grasp_method(median_large,
                               grasp_array_x)  # function for comparing width of the object vs width of the robotic hand
+        print("green points ",y_grasp, x_pt1, x_pt2)
+
+    y_shallow = shallow_grasp_y[(len(
+        shallow_grasp_y) - 1)]  # storing y-axis values in a variable to determine geometric centre with respect to the y-axis coordinate closest to the camera (red points)
+
+    '''Red point prediction marked by the shallowest points on the objects based on depth of object closest to the camera.'''
 
     if len(shallow_grasp_x) > 0:
         x_pt1 = int(shallow_grasp_x[0])  # the 1st x-axis coordinates which happen to be lesser than the median depth of
@@ -229,6 +268,8 @@ def image_segmentation_depth(y_extent, x_extent, y_coord, x_coord, depth, image,
         y_grasp)  # appending the value of y_grasp into the array to ensure it can be recalled in the next frame
     shallow_cluster_y.append(
         y_shallow)  # apending the value of y_shallow into the array to ensure it can be recalled in the next frame
+    x_centroid_marker.append(
+        x_marker_first)  # storing the y_axis values from x_marker into an array to be available in the next frame for continuity
 
     return image  # returning a modified image which has depth based segmentation mask
     # marked on the image in the area of the bounding box
@@ -238,6 +279,7 @@ def median_average(median, median_max, avg_median):
     '''Averaging function to stablise the depth obtained from 'image_segmentation_depth'. The idea behind this was
     behind the assumption that depth estimate of one frame was accurate but the depth over multiple frames would allow
     a better understanding of the depth of the object which provides the program with it's segmentation mask.'''
+
     median_max.append(median)
     # print(len(median_max))
     while len(median_max) % 10 == 0:  # averaging function over 10 frames
@@ -266,9 +308,10 @@ def grasp_method(median_large, grasp_array_x):
     of the grasping points. If they are greater than the width of the curved hand, then it will be uncomfortable for
     grasping the object in the present pose and thus, will have to be changed, to be more accessible by the hand for
     a better grip.'''
+
     min_object = min(grasp_array_x)
     final = median_large - min_object
-    if final < 0.7:
+    if final < 0.7: # maximum flexing of the arm to grasp the object - change it to match robotic arm measurements
         method = "Grasp"
     else:
         method = "Pinch"
@@ -285,6 +328,7 @@ def image_segmentation_colour(image, mask, y_coord, y_extent, x_coord, x_extent,
 
     Depth based segmentation is the primary method but colour based segmentation is also useful in some situations,
     personally it works phenomenally well, in darker colour regions.'''
+
     cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(
             x_coord + x_extent)]  # cropping the image to the size of the bounding box to reduce confusion by the inRange function in detecting the dominant colour
     try:
@@ -316,6 +360,7 @@ def color_test(image):
     boundaries for the colours in the RGB matrix from images on the internet which had a different colour composition than
     from the ones, the camera was seeing. Thus, it had to be altered using a testing method like this function, where the colour
     values of BGRA pixel was manually entered and it was determined to be the best range for the colour composition.'''
+
     # to test the robustness of the color recognition method and can be deleted later if needed
     image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)  # the Alpha Channel is stripped from the initial image
     lower = np.array([1, 90, 200], dtype="uint8")  # the lower boundary for the inRange function is set
@@ -404,14 +449,15 @@ def get_detected_objects(detected_objects, label, x, y, z, camera_pose, py_trans
     tx, ty, tz, rx, ry, rz = positional_buffer_CAMERAframe(camera_pose, py_translation,
                                                            positional_buffer_array,
                                                            rotational_buffer_array)  # transaltional, rotational data received from the buffer function
-    # tx, ty, tz = get_positional_data(camera_pose,py_translation)
+    # tx, ty, tz, rx, ry, rz = get_positional_data(camera_pose,py_translation)
+
     tx = round(tx, 3)
     ty = round(ty, 3)
     tz = round(tz, 3)
     x = round(x, 3)
     y = round(y, 3)
     z = round(z, 3)
-    # print(tx, ty, tz)
+
     duplicate_detections = []  # an array to store the detection data when the class of object already exists in the list of detected objects
     exist_values_array = []  # an array that stores the values of duplicate objects from the class to compare it's existence from previous detected data
 
@@ -532,7 +578,6 @@ def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer
 
     x_sum = y_sum = z_sum = 0.0
     rx_sum = ry_sum = rz_sum = 0.0
-    time_start = None
     if tx != 0.0 or ty != 0.0 or tz != 0.0:  # A trigger to start storing values for translation to be processed later
         pos = [tx, ty, tz]
         if pos not in positional_buffer_array:  # storing unique values in an array
@@ -546,8 +591,7 @@ def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer
     if len(positional_buffer_array) > 0:  # if the translational array is not None
         print("Trans True")
         if abs(tx) == 0.0 and abs(ty) == 0.0 and abs(tz) == 0.0:  # if the values have stablised to reach a zero value
-            # print("Condition zero trans")
-            # print("greater : ", positional_buffer_array)
+           # print("greater : ", positional_buffer_array)
             for x, y, z in positional_buffer_array:  # take the individual x,y,z values and in the list and add them
                 x_sum += x
                 y_sum += y
@@ -559,7 +603,6 @@ def positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer
         print("Rot True")
         if abs(rx) == 0.0 and abs(ry) == 0.0 and abs(rz) == 0.0:  # if the values have stablised to reach a zero value
             print("Condition zero rot")
-            # print("greater : ", rotational_buffer_array)
             for x, y, z in rotational_buffer_array:  # take the individual x,y,z values and in the list and add them
                 rx_sum += x
                 ry_sum += y
@@ -578,6 +621,7 @@ def rotational_update(detected_objects, rx, ry, rz):
     '''When the camera rotates, its coordinate system changes and this update needs to be reflected in the memory component
     of the deteccted objects as well. The new coordinate system has a new x,y,z value where the previous coordinate system's
     values now have to be updated with the new coordinate system's values.'''
+
     rotation = False
     detected_objects_rot = []
     i = 0
@@ -654,6 +698,7 @@ def rotational_update(detected_objects, rx, ry, rz):
 
 def positional_update(detected_objects, tx, ty, tz):
     '''Adding the translational values to the objects in the detected memory to update their location.'''
+
     length = len(detected_objects)
     i = 0
     detected_objects_change = []
@@ -677,6 +722,7 @@ def positional_update(detected_objects, tx, ty, tz):
 def positional_update_left(detected_objects, tx, ty, tz):
     '''If the camera has been rotated to the left, it's positional tracking method now has to be changed from it's
     previously used updating method.'''
+
     length = len(detected_objects)
     i = 0
     detected_objects_rot = []
@@ -700,6 +746,7 @@ def positional_update_left(detected_objects, tx, ty, tz):
 def positional_update_right(detected_objects, tx, ty, tz):
     '''If the camera has been rotated to the right, it's positional tracking method now has to be changed from it's
         previously used updating method.'''
+
     length = len(detected_objects)
     i = 0
     detected_objects_rot = []
@@ -723,6 +770,7 @@ def positional_update_right(detected_objects, tx, ty, tz):
 def positional_update_inverted(detected_objects, tx, ty, tz):
     '''If the camera has been rotated by 180 degrees, it's positional tracking method now has to be changed from it's
             previously used updating method.'''
+
     length = len(detected_objects)
     i = 0
     detected_objects_change = []
@@ -754,6 +802,7 @@ def get_ssim(cropped_image, duplicate_id):
     However, the method was difficult to interpret in terms of usable data)
      The method was successful when google images or snapped photos of objects were compared but it wasn't helpful
      when the object detection using ZED was performed due to variation in camera image quality.'''
+
     try:
         cropped_image = cv2.cvtColor(cropped_image,
                                      cv2.COLOR_BGRA2BGR)  # the alpha channel in the cropped image is removed
@@ -777,22 +826,28 @@ def image_compare_hist(cropped_image, duplicate_id, label):
     which accounts for change in pose (rotated or flipped) and is more-reliable even though runs into issues as the object
     detection method primarily uses openCV and thus, the image now has to be first saved (as present_image.jpg using openCV)
     and then called from memory.'''
+
     error = 95  # error of margin for the comparison method i.e. if the images are 90% similar than it is the same object
-    h1 = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2BGR)  # the Alpha channel is removed
-    cv2.imwrite("present_image.jpg", h1)  # the present object instance is saved in memory
-    time.sleep(0.01)
-    h1 = Image.open("present_image.jpg")  # present image is opened for recognition
-    # h2 = Image.open("memory_images/{}.jpg".format(duplicate_id))  # the image to be compared is opened for comparison
     try:
-        h2 = Image.open("/home/adi/Downloads/zed-yolo/libdarknet/images/{}.jpg".format(duplicate_id))
+        h1 = cv2.cvtColor(cropped_image, cv2.COLOR_BGRA2BGR)  # the Alpha channel is removed
+        cv2.imwrite("present_image.jpg", h1)  # the present object instance is saved in memory
+        time.sleep(0.1)
+        h1 = Image.open("present_image.jpg")  # present image is opened for recognition
+        # h2 = Image.open("memory_images/{}.jpg".format(duplicate_id))  # the image to be compared is opened for comparison
+        try:
+            h2 = Image.open("/home/adi/Downloads/zed-yolo/libdarknet/images/{}.jpg".format(duplicate_id))
+        except:
+            h2 = Image.open("present_image.jpg")
+        diff = ImageChops.difference(h1, h2).histogram()  # the histograms of the 2 images are compared
+        sq = (value * (i % 256) ** 2 for i, value in
+              enumerate(diff))  # a weighting function is applied to provide equal weights to all colours
+        sum_squares = sum(sq)
+        rms = math.sqrt(sum_squares / float(h1.size[0] * h1.size[1]))  # performing a root mean square
+        # print(label, "rms value: ", rms)
+        # Error is an arbitrary value, based on values when
+        # comparing 2 rotated images & 2 different images.
     except:
-        h2 = Image.open("present_image.jpg")
-    diff = ImageChops.difference(h1, h2).histogram()  # the histograms of the 2 images are compared
-    sq = (value * (i % 256) ** 2 for i, value in
-          enumerate(diff))  # a weighting function is applied to provide equal weights to all colours
-    sum_squares = sum(sq)
-    rms = math.sqrt(sum_squares / float(h1.size[0] * h1.size[1]))  # performing a root mean square
-    # print(label, "rms value: ", rms)
-    # Error is an arbitrary value, based on values when
-    # comparing 2 rotated images & 2 different images.
+        rms = 94
+
+
     return rms < error
