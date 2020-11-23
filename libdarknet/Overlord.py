@@ -43,11 +43,9 @@ def socket_client_detected_memory():
         # Receive response from the server
         data, server = sock.recvfrom(4096)
         detection_data = str(data)
-        z = detection_data.split("]")  # splitting the string into a list based on " ' " separator
-        x = 0  # initiating a count variable to iterate the list
-        while x < len(detection_data):  # a while loop to iterate through the list and print odd values
-            print(detection_data[x])
-            x += 1
+        detected_objects_memory = detection_data.split("]")  # splitting the string into a list based on " ' " separator
+        for detected_object in detected_objects_memory:
+            print(detected_object)
     finally:
         sock.close()
 

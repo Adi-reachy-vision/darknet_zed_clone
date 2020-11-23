@@ -342,6 +342,19 @@ def generate_color(meta_path):
         color_array.append((randint(0, 255), randint(0, 255), randint(0, 255)))
     return color_array
 
+def get_positional_data(camera_pose, py_translation):
+    rotation = camera_pose.get_rotation_vector()  # The rotation information from the gyroscopic sensors
+    rx = round(rotation[0], 2)  # The rotational information of the x-axis
+    ry = round(rotation[1], 2)  # The rotational information of the y-axis
+    rz = round(rotation[2], 2)  # The rotational information of the z-axis
+
+    translation = camera_pose.get_translation(py_translation)  # The translational information from the IMU sensors
+    tx = round(translation.get()[0], 3)  # The translational information of the x-axis
+    ty = round(translation.get()[1], 3)  # The translational information of the y-axis
+    tz = round(translation.get()[2], 3)  # The translational information of the z-axis
+
+    return tx,ty,tz,rx,ry,rz
+
 
 def main(argv):
     thresh = 0.5
@@ -385,14 +398,16 @@ def main(argv):
         # Launch camera by id
         input_type.set_from_camera_id(zed_id)
 
-    init = sl.InitParameters(input_t=input_type)
-    #init.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
+    # ZED parameters
+
+    init = sl.InitParameters(input_t=input_type) #input parameters for ZED
+    #init.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP #ZED coordinate system
     init.sdk_verbose = True
-    init.coordinate_units = sl.UNIT.METER
-    init.depth_minimum_distance = 0.20
-    init.camera_resolution = sl.RESOLUTION.HD720
-    init.depth_mode = sl.DEPTH_MODE.QUALITY
-    init.camera_fps = 60
+    init.coordinate_units = sl.UNIT.METER # ZED's distance measurement
+    init.depth_minimum_distance = 0.20 # ZED's minimum distance setting
+    init.camera_resolution = sl.RESOLUTION.HD720 # Camera resolution
+    init.depth_mode = sl.DEPTH_MODE.QUALITY # Depth mode setting between ULTRA, QUALITY, PERFORMANCE
+    init.camera_fps = 60 # Camera fps
 
     cam = sl.Camera()
     if not cam.is_opened():
@@ -404,7 +419,7 @@ def main(argv):
 
     runtime = sl.RuntimeParameters()
     # Use FILL sensing mode
-    runtime.sensing_mode = sl.SENSING_MODE.FILL
+    runtime.sensing_mode = sl.SENSING_MODE.FILL # Sensing mode
     mat = sl.Mat()
     point_cloud_mat = sl.Mat()
 
@@ -462,7 +477,7 @@ def main(argv):
     positional_buffer_array = [] # array to store positional data over multiple frames
     rotational_buffer_array = [] # array to store rotational data over multiple frames
     x_centroid = []
-    x_centroid_marker = []
+    x_centroid_marker = [] # array to store black points
     #live_feed = None
     key = ''
     sensor_data = sl.SensorsData() # variable to store sensor data from ZED camera
@@ -477,19 +492,32 @@ def main(argv):
         if err == sl.ERROR_CODE.SUCCESS:
             cam.get_sensors_data(sensor_data, sl.TIME_REFERENCE.IMAGE) # retrieve sensor data into variable sensor_data
             cam.retrieve_image(mat, sl.VIEW.LEFT) # obtain left camera frame and store it in variable - image
+            cam.retrieve_measure(point_cloud_mat, sl.MEASURE.XYZRGBA)  # point cloud data extracted in variable - depth
+
             image = mat.get_data() #image to be processed
             py_translation = sl.Translation() # translation data
-            cam.retrieve_measure(point_cloud_mat, sl.MEASURE.XYZRGBA) # point cloud data extracted in variable - depth
             depth = point_cloud_mat.get_data()
-            # Do the detection
+
             start_time = time.time()  # start time of the loop - checkpoint (pre-detection)
-            detections = detect(netMain, metaMain, image, thresh) # detections performed and obtained from yolo framework
+            mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))  # a black image, the size of the input camera frame
+
+            tx, ty, tz, rx, ry, rz, stable = Bridge.positional_buffer_CAMERAframe(camera_pose, py_translation, positional_buffer_array,rotational_buffer_array)
+            if stable is True:
+                # Do the detection when the camera is not moving
+                detections = detect(netMain, metaMain, image, thresh) # detections performed and obtained from yolo framework
+            else:
+                detections.clear()
+
             bench_time = time.time()  # setting checkpoint for the loop - checkpoint (post detection)
-            mask = np.zeros((image.shape[0], image.shape[1], image.shape[2])) # a black image, the size of the input camera frame
-            tracking_state = cam.get_position(camera_pose, sl.REFERENCE_FRAME.LAST)  # initialises a positional tracking sequence to give the distance moved by the camera using frame world reference
+
+            tracking_state = cam.get_position(camera_pose, sl.REFERENCE_FRAME.LAST)  # initialises a positional tracking sequence to give the distance moved by the camera using camera frame reference
+
             # log.info(chr(27) + "[2J" + "**** " + str(len(detections)) + " Results ****")  # printing detected objects
+
             for detection in detections:
+
                 label = detection[0] # label of the object class
+
                 confidence = detection[1] # confidence of the detection
 
                 pstring = label + ": " + str(np.rint(100 * confidence)) + "%" #detection data that can be showed in terminal window
@@ -509,7 +537,7 @@ def main(argv):
                 distance = "{:.2f}".format(distance) # determining the distance in eucilidian distance format
 
                 distance_data = str(label) + ", position from camera x = " + str(round(x, 2)) + " m,  y= " + str(
-                    round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m,"
+                    round(y, 2)) + " m,  z= " + str(round(z, 2)) + " m," # generating a string with distance data to be displayed in the socket
 
                 cropped_image = image[y_coord:(y_coord + y_extent), x_coord:(x_coord + x_extent)] # cropped image for image comparison or colour recognition
 
@@ -521,10 +549,8 @@ def main(argv):
 
                     color_string = Bridge.get_color(cropped_image)  # getting colour output from the function as a string
 
-                    thresh_color = 10
-
+                    thresh_color = 10 # threshold range for colour based segmentation
                     #mask = Bridge.image_segmentation_colour(image, mask, y_coord, y_extent, x_coord, x_extent,thresh_color, bounds)
-
                     # segmentation based on colour with adaptive threshold range
 
                     label = color_string + " " + label
@@ -544,14 +570,14 @@ def main(argv):
                                 (x_coord + (thickness * 4), y_coord + (10 + thickness * 4)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-                    cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),
-                                  # pasting bounding box around detected object
+                    cv2.rectangle(image, (x_coord - thickness, y_coord - thickness),    # pasting bounding box around detected object
                                   (x_coord + x_extent + thickness, y_coord + y_extent + thickness),
                                   color_array[detection[3]], int(thickness))
 
                 detected_objects = Bridge.get_detected_objects(detected_objects, label, x, y, z, camera_pose,
                                                                py_translation, cropped_image, existing_labels,
                                                                positional_buffer_array, rotational_buffer_array)
+                #   detected objects array which stores all detections in the past in an array
 
                 point_cloud_data += distance_data # adding distance data to be displayed over the socket display in Overlord
 
@@ -583,7 +609,7 @@ def main(argv):
             # output = time.time() - probs # check point to see total loop time
             # log.info("Detection time: {}".format(bench_time - start_time)) #checking how long the detection takes
             # log.info("Camera FPS: {}".format(1.0 / (time.time() - bench_time)))
-            #log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
+            # log.info("Output FPS: {}".format((1.0 / (time.time() - probs))))
         else:
             key = cv2.waitKey(5)
     cv2.destroyAllWindows()
